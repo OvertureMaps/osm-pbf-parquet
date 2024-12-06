@@ -170,11 +170,7 @@ impl ElementSink {
 
     pub fn add_node(&mut self, node: &Node) {
         let info = node.info();
-        let user = info
-            .user()
-            .unwrap_or_else(|| Ok(""))
-            .unwrap_or("")
-            .to_string();
+        let user = info.user().unwrap_or(Ok("")).unwrap_or("").to_string();
 
         let est_size_bytes = self.osm_builder.append_row(
             node.id(),
@@ -223,11 +219,7 @@ impl ElementSink {
 
     pub fn add_way(&mut self, way: &Way) {
         let info = way.info();
-        let user = info
-            .user()
-            .unwrap_or_else(|| Ok(""))
-            .unwrap_or("")
-            .to_string();
+        let user = info.user().unwrap_or(Ok("")).unwrap_or("").to_string();
 
         let est_size_bytes = self.osm_builder.append_row(
             way.id(),

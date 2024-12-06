@@ -42,7 +42,7 @@ pub struct Args {
     pub worker_threads: Option<usize>,
 
     /// Advanced options:
-
+    ///
     /// Input buffer size, default 8MB
     #[arg(long)]
     pub input_buffer_size_mb: Option<usize>,
@@ -98,10 +98,10 @@ impl Args {
 fn default_record_batch_size_mb() -> usize {
     let system = System::new_all();
     // Estimate per thread available memory, leaving overhead for copies and system processes
-    return ((system.total_memory() as usize / BYTES_IN_MB) / system.cpus().len()) / 8usize;
+    ((system.total_memory() as usize / BYTES_IN_MB) / system.cpus().len()) / 8usize
 }
 
 fn default_worker_thread_count() -> usize {
     let system = System::new_all();
-    return system.cpus().len();
+    system.cpus().len()
 }
