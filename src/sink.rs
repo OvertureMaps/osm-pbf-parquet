@@ -242,11 +242,7 @@ impl ElementSink {
 
     pub fn add_relation(&mut self, relation: &Relation) {
         let info = relation.info();
-        let user = info
-            .user()
-            .unwrap_or_else(|| Ok(""))
-            .unwrap_or("")
-            .to_string();
+        let user = info.user().unwrap_or(Ok("")).unwrap_or("").to_string();
 
         let members_iter = relation.members().map(|member| {
             let type_ = match member.member_type {
