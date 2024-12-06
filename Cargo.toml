@@ -14,6 +14,7 @@ futures = "0.3.*"
 futures-util = "0.3.*"
 log = "0.4.*"
 object_store = {version = "0.10.2", features = ["aws"] }
+# TODO - move this upstream once https://github.com/b-r-u/osmpbf/pull/48 is landed
 osmpbf = { version = "0.3.*", features = ["zlib-ng", "async"], default-features = false, git = "https://github.com/brad-richardson/osmpbf.git", branch = "async-blob-reader" }
 parquet = { version = "52.*", features = ["async"] }
 sysinfo = "0.31.*"

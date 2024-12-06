@@ -1,5 +1,31 @@
-## osm-pbf-parquet
-Transcode OSM PBF file to parquet files with hive-style partitioning by type:
+# osm-pbf-parquet
+Transcode OSM PBF file to parquet files with hive-style partitioning by type
+
+## Getting started
+
+### Download
+Download latest version from [releases](https://github.com/OvertureMaps/osm-pbf-parquet/releases)
+
+### Usage
+Example for x86_64 linux system with pre-compiled binary:
+```
+curl -L "https://github.com/OvertureMaps/osm-pbf-parquet/releases/latest/download/osm-pbf-parquet-x86_64-unknown-linux-gnu.tar.gz" -o "osm-pbf-parquet.tar.gz"
+tar -xzf osm-pbf-parquet.tar.gz
+chmod +x osm-pbf-parquet
+./osm-pbf-parquet --input your.osm.pbf --output ./parquet
+```
+
+OR compile and run locally:
+```
+git clone https://github.com/OvertureMaps/osm-pbf-parquet.git
+cargo run --release -- --input your.osm.pbf --output ./parquet
+```
+
+### Supported input/output
+- Local filesystem
+- AWS S3 (auth read from environment, see [object_store docs](https://docs.rs/object_store/latest/object_store/aws/struct.AmazonS3Builder.html))
+
+### Output structure
 ```
 planet.osm.pbf
 parquet/
@@ -15,12 +41,15 @@ parquet/
 ```
 [Reference Arrow/SQL schema](https://github.com/OvertureMaps/osm-pbf-parquet/blob/main/src/osm_arrow.rs)
 
-Reading output data:
-```
--- DuckDB
-duckdb -c "SELECT * FROM read_parquet('s3://your-s3-bucket/path/') LIMIT 10;"
+### Querying
 
--- DDL, table repair and query for Athena/Presto/Trino
+#### DuckDB
+```
+duckdb -c "SELECT * FROM read_parquet('s3://your-s3-bucket/path/') LIMIT 10;"
+```
+
+#### Athena/Presto/Trino
+```
 CREATE EXTERNAL TABLE IF NOT EXISTS `osm` (
     `id` BIGINT,
     `tags` MAP<STRING, STRING>,
@@ -41,30 +70,11 @@ PARTITIONED BY (
 ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
 STORED AS PARQUET
 LOCATION 's3://your-s3-bucket/path/';
+
 MSCK REPAIR TABLE `osm`;
+
 SELECT * FROM osm LIMIT 10;
 ```
-
-
-## Download
-Download latest version from [releases](https://github.com/OvertureMaps/osm-pbf-parquet/releases)
-
-
-## Usage
-Example for x86_64 linux system with pre-compiled binary:
-```
-curl -L "https://github.com/OvertureMaps/osm-pbf-parquet/releases/latest/download/osm-pbf-parquet-x86_64-unknown-linux-gnu.tar.gz" -o "osm-pbf-parquet.tar.gz"
-tar -xzf osm-pbf-parquet.tar.gz
-chmod +x osm-pbf-parquet
-./osm-pbf-parquet --input your.osm.pbf --output ./parquet
-```
-
-OR compile and run locally:
-```
-git clone https://github.com/OvertureMaps/osm-pbf-parquet.git
-cargo run --release -- --input your.osm.pbf --output ./parquet
-```
-
 
 ## Development
 1. [Install rust](https://www.rust-lang.org/tools/install)

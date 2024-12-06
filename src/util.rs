@@ -24,6 +24,7 @@ static BYTES_IN_MB: usize = 1024 * 1024;
 pub struct Args {
     /// Path to input PBF
     /// S3 URIs and filesystem paths are supported
+    /// Note that reading from S3 is *much* slower, consider copying locally first
     #[arg(short, long)]
     pub input: String,
 
