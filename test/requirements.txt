@@ -1,0 +1,3 @@
+pandas
+xmltodict
+pyarrow
