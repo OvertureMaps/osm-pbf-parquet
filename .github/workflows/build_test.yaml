@@ -31,16 +31,11 @@ jobs:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+    - uses: astral-sh/setup-uv@v5
     - name: Build
       run: cargo build --release
     - name: Install osmium
       run: sudo apt-get update && sudo apt-get install -y osmium-tool
-    - name: Install python test dependencies
-      working-directory: ./test
-      run: pip3 install -r requirements.txt
     - name: Prepare and run test
       run: ./test.sh
       working-directory: ./test
