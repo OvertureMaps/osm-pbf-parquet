@@ -1,13 +1,13 @@
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU64;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
-use sysinfo::System;
 
 use clap::Parser;
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
 
-use crate::osm_arrow::OSMType;
 use crate::ElementSink;
+use crate::osm_arrow::OSMType;
 
 pub type SinkpoolStore = HashMap<OSMType, Arc<Mutex<Vec<ElementSink>>>>;
 
@@ -76,7 +76,12 @@ impl Args {
     }
 
     pub fn get_worker_threads(&self) -> usize {
-        self.worker_threads.unwrap_or(default_worker_thread_count())
+        self.worker_threads.unwrap_or_else(|| {
+            let system = System::new_with_specifics(
+                RefreshKind::nothing().with_cpu(CpuRefreshKind::nothing()),
+            );
+            system.cpus().len()
+        })
     }
 
     pub fn get_input_buffer_size_bytes(&self) -> usize {
@@ -86,7 +91,7 @@ impl Args {
 
     pub fn get_record_batch_target_bytes(&self) -> usize {
         self.record_batch_target_mb
-            .unwrap_or(default_record_batch_size_mb())
+            .unwrap_or_else(default_record_batch_size_mb)
             * BYTES_IN_MB
     }
 
@@ -96,12 +101,13 @@ impl Args {
 }
 
 fn default_record_batch_size_mb() -> usize {
-    let system = System::new_all();
+    let system = System::new_with_specifics(
+        RefreshKind::nothing()
+            .with_cpu(CpuRefreshKind::nothing())
+            .with_memory(MemoryRefreshKind::everything()),
+    );
+    let total_memory_mb = system.total_memory() as usize / BYTES_IN_MB;
+    let cpu_count = system.cpus().len();
     // Estimate per thread available memory, leaving overhead for copies and system processes
-    ((system.total_memory() as usize / BYTES_IN_MB) / system.cpus().len()) / 8usize
-}
-
-fn default_worker_thread_count() -> usize {
-    let system = System::new_all();
-    system.cpus().len()
+    (total_memory_mb / cpu_count) / 8usize
 }

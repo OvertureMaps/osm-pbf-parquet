@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use osm_pbf_parquet::pbf_driver;
 use osm_pbf_parquet::util::Args;
 use std::fs;
