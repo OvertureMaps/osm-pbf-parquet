@@ -12,30 +12,37 @@ env:
   RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  build:
+  lint:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+    - uses: Swatinem/rust-cache@v2
+    - name: Run clippy
+      run: cargo clippy --all-targets
+    - name: Run cargo fmt
+      run: cargo fmt --all -- --check
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
     - uses: actions/setup-python@v5
       with:
         python-version: '3.12'
     - name: Build
-      run: cargo build
+      run: cargo build --release
     - name: Install osmium
-      run: sudo apt install osmium-tool
+      run: sudo apt-get update && sudo apt-get install -y osmium-tool
     - name: Install python test dependencies
       working-directory: ./test
       run: pip3 install -r requirements.txt
     - name: Prepare and run test
-      if: success() || failure()
       run: ./test.sh
       working-directory: ./test
     - name: Benchmark
-      if: success() || failure()
       run: cargo bench
-    - name: Run clippy
-      if: success() || failure()
-      run: cargo clippy --all-targets --all-features
-    - name: Run cargo fmt
-      if: success() || failure()
-      run: cargo fmt --all -- --check
