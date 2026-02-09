@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use arrow::array::builder::{
     BooleanBuilder, Int64Builder, ListBuilder, MapBuilder, StringBuilder, StructBuilder,
@@ -16,11 +16,23 @@ pub enum OSMType {
     Relation,
 }
 
-impl fmt::Display for OSMType {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "{}", format!("{:?}", self).to_lowercase())
+impl OSMType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            OSMType::Node => "node",
+            OSMType::Way => "way",
+            OSMType::Relation => "relation",
+        }
     }
 }
+
+impl fmt::Display for OSMType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+static OSM_SCHEMA: LazyLock<Arc<Schema>> = LazyLock::new(|| Arc::new(osm_arrow_schema()));
 
 pub fn osm_arrow_schema() -> Schema {
     // Derived from this schema:
@@ -95,19 +107,23 @@ pub fn osm_arrow_schema() -> Schema {
     ])
 }
 
+pub fn cached_osm_schema() -> Arc<Schema> {
+    OSM_SCHEMA.clone()
+}
+
 pub struct OSMArrowBuilder {
-    id_builder: Box<Int64Builder>,
-    tags_builder: Box<MapBuilder<StringBuilder, StringBuilder>>,
-    lat_builder: Box<Float64Builder>,
-    lon_builder: Box<Float64Builder>,
-    nodes_builder: Box<ListBuilder<StructBuilder>>,
-    members_builder: Box<ListBuilder<StructBuilder>>,
-    changeset_builder: Box<Int64Builder>,
-    timestamp_builder: Box<TimestampMillisecondBuilder>,
-    uid_builder: Box<Int32Builder>,
-    user_builder: Box<StringBuilder>,
-    version_builder: Box<Int32Builder>,
-    visible_builder: Box<BooleanBuilder>,
+    id_builder: Int64Builder,
+    tags_builder: MapBuilder<StringBuilder, StringBuilder>,
+    lat_builder: Float64Builder,
+    lon_builder: Float64Builder,
+    nodes_builder: ListBuilder<StructBuilder>,
+    members_builder: ListBuilder<StructBuilder>,
+    changeset_builder: Int64Builder,
+    timestamp_builder: TimestampMillisecondBuilder,
+    uid_builder: Int32Builder,
+    user_builder: StringBuilder,
+    version_builder: Int32Builder,
+    visible_builder: BooleanBuilder,
 }
 
 impl Default for OSMArrowBuilder {
@@ -118,51 +134,34 @@ impl Default for OSMArrowBuilder {
 
 impl OSMArrowBuilder {
     pub fn new() -> Self {
-        let id_builder = Box::new(Int64Builder::new());
-        let tags_builder = Box::new(MapBuilder::new(
-            None,
-            StringBuilder::new(),
-            StringBuilder::new(),
-        ));
-        let lat_builder = Box::new(Float64Builder::new());
-        let lon_builder = Box::new(Float64Builder::new());
-        let nodes_builder = Box::new(ListBuilder::new(StructBuilder::from_fields(
-            vec![Field::new("ref", DataType::Int64, true)],
-            0,
-        )));
-        let members_builder = Box::new(ListBuilder::new(StructBuilder::from_fields(
-            vec![
-                Field::new("type", DataType::Utf8, true),
-                Field::new("ref", DataType::Int64, true),
-                Field::new("role", DataType::Utf8, true),
-            ],
-            0,
-        )));
-        let changeset_builder = Box::new(Int64Builder::new());
-        let timestamp_builder = Box::new(TimestampMillisecondBuilder::new());
-        let uid_builder = Box::new(Int32Builder::new());
-        let user_builder = Box::new(StringBuilder::new());
-        let version_builder = Box::new(Int32Builder::new());
-        let visible_builder = Box::new(BooleanBuilder::new());
-
         OSMArrowBuilder {
-            id_builder,
-            tags_builder,
-            lat_builder,
-            lon_builder,
-            nodes_builder,
-            members_builder,
-            changeset_builder,
-            timestamp_builder,
-            uid_builder,
-            user_builder,
-            version_builder,
-            visible_builder,
+            id_builder: Int64Builder::new(),
+            tags_builder: MapBuilder::new(None, StringBuilder::new(), StringBuilder::new()),
+            lat_builder: Float64Builder::new(),
+            lon_builder: Float64Builder::new(),
+            nodes_builder: ListBuilder::new(StructBuilder::from_fields(
+                vec![Field::new("ref", DataType::Int64, true)],
+                0,
+            )),
+            members_builder: ListBuilder::new(StructBuilder::from_fields(
+                vec![
+                    Field::new("type", DataType::Utf8, true),
+                    Field::new("ref", DataType::Int64, true),
+                    Field::new("role", DataType::Utf8, true),
+                ],
+                0,
+            )),
+            changeset_builder: Int64Builder::new(),
+            timestamp_builder: TimestampMillisecondBuilder::new(),
+            uid_builder: Int32Builder::new(),
+            user_builder: StringBuilder::new(),
+            version_builder: Int32Builder::new(),
+            visible_builder: BooleanBuilder::new(),
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn append_row<T, N, M>(
+    pub fn append_row<'a, T, N, M>(
         &mut self,
         id: i64,
         _type_: OSMType,
@@ -174,14 +173,14 @@ impl OSMArrowBuilder {
         changeset: Option<i64>,
         timestamp_ms: Option<i64>,
         uid: Option<i32>,
-        user: Option<String>,
+        user: Option<&str>,
         version: Option<i32>,
         visible: Option<bool>,
     ) -> usize
     where
-        T: IntoIterator<Item = (String, String)>,
+        T: IntoIterator<Item = (&'a str, &'a str)>,
         N: IntoIterator<Item = i64>,
-        M: IntoIterator<Item = (OSMType, i64, Option<String>)>,
+        M: IntoIterator<Item = (OSMType, i64, Option<&'a str>)>,
     {
         // Track approximate size of inserted data, starting with known constant sizes
         let mut est_size_bytes = 64usize;
@@ -218,7 +217,7 @@ impl OSMArrowBuilder {
             members_struct_builder
                 .field_builder::<StringBuilder>(0)
                 .unwrap()
-                .append_value(osm_type.to_string());
+                .append_value(osm_type.as_str());
 
             members_struct_builder
                 .field_builder::<Int64Builder>(1)
@@ -260,6 +259,6 @@ impl OSMArrowBuilder {
             Arc::new(self.visible_builder.finish()),
         ];
 
-        RecordBatch::try_new(Arc::new(osm_arrow_schema()), array_refs)
+        RecordBatch::try_new(cached_osm_schema(), array_refs)
     }
 }
