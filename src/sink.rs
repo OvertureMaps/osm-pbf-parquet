@@ -12,9 +12,9 @@ use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 use url::Url;
 
-use crate::osm_arrow::osm_arrow_schema;
 use crate::osm_arrow::OSMArrowBuilder;
 use crate::osm_arrow::OSMType;
+use crate::osm_arrow::osm_arrow_schema;
 use crate::util::ARGS;
 
 pub struct ElementSink {

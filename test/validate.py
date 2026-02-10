@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "pandas",
+#     "pyarrow",
+#     "xmltodict",
+# ]
+# ///
+
 import xmltodict
 import pandas as pd
 from pathlib import Path

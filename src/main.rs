@@ -16,6 +16,9 @@ fn main() {
         .build()
         .unwrap()
         .block_on(async {
-            let _ = pbf_driver(args).await;
+            if let Err(e) = pbf_driver(args).await {
+                eprintln!("Error: {e:?}");
+                std::process::exit(1);
+            }
         });
 }
