@@ -12,9 +12,7 @@ use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 use url::Url;
 
-use crate::osm_arrow::OSMArrowBuilder;
-use crate::osm_arrow::OSMType;
-use crate::osm_arrow::osm_arrow_schema;
+use crate::osm_arrow::{OSMArrowBuilder, OSMType, cached_osm_schema};
 use crate::util::ARGS;
 
 pub struct ElementSink {
@@ -36,7 +34,7 @@ pub struct ElementSink {
 
 impl ElementSink {
     pub fn new(filenum: Arc<Mutex<u64>>, osm_type: OSMType) -> Result<Self, anyhow::Error> {
-        let args = ARGS.get().unwrap();
+        let args = ARGS.get().expect("ARGS not initialized");
 
         let full_path = Self::create_full_path(&args.output, &osm_type, &filenum, args.compression);
         let buf_writer = Self::create_buf_writer(&full_path)?;
@@ -77,7 +75,7 @@ impl ElementSink {
             self.writer.take().unwrap().close().await?;
 
             // Create new writer and output
-            let args = ARGS.get().unwrap();
+            let args = ARGS.get().expect("ARGS not initialized");
             let full_path = Self::create_full_path(
                 &args.output,
                 &self.osm_type,
@@ -138,7 +136,7 @@ impl ElementSink {
         }
         let props = props_builder.build();
 
-        let writer = AsyncArrowWriter::try_new(buffer, Arc::new(osm_arrow_schema()), Some(props))?;
+        let writer = AsyncArrowWriter::try_new(buffer, cached_osm_schema(), Some(props))?;
         Ok(writer)
     }
 
@@ -170,13 +168,12 @@ impl ElementSink {
 
     pub fn add_node(&mut self, node: &Node) {
         let info = node.info();
-        let user = info.user().unwrap_or(Ok("")).unwrap_or("").to_string();
+        let user = info.user().unwrap_or(Ok("")).unwrap_or("");
 
         let est_size_bytes = self.osm_builder.append_row(
             node.id(),
             OSMType::Node,
-            node.tags()
-                .map(|(key, value)| (key.to_string(), value.to_string())),
+            node.tags(),
             Some(node.lat()),
             Some(node.lon()),
             std::iter::empty(),
@@ -193,16 +190,12 @@ impl ElementSink {
 
     pub fn add_dense_node(&mut self, node: &DenseNode) {
         let info = node.info();
-        let mut user: Option<String> = None;
-        if let Some(info) = info {
-            user = Some(info.user().unwrap_or("").to_string());
-        }
+        let user = info.map(|info| info.user().unwrap_or(""));
 
         let est_size_bytes = self.osm_builder.append_row(
             node.id(),
             OSMType::Node,
-            node.tags()
-                .map(|(key, value)| (key.to_string(), value.to_string())),
+            node.tags(),
             Some(node.lat()),
             Some(node.lon()),
             std::iter::empty(),
@@ -219,13 +212,12 @@ impl ElementSink {
 
     pub fn add_way(&mut self, way: &Way) {
         let info = way.info();
-        let user = info.user().unwrap_or(Ok("")).unwrap_or("").to_string();
+        let user = info.user().unwrap_or(Ok("")).unwrap_or("");
 
         let est_size_bytes = self.osm_builder.append_row(
             way.id(),
             OSMType::Way,
-            way.tags()
-                .map(|(key, value)| (key.to_string(), value.to_string())),
+            way.tags(),
             None,
             None,
             way.refs(),
@@ -242,7 +234,7 @@ impl ElementSink {
 
     pub fn add_relation(&mut self, relation: &Relation) {
         let info = relation.info();
-        let user = info.user().unwrap_or(Ok("")).unwrap_or("").to_string();
+        let user = info.user().unwrap_or(Ok("")).unwrap_or("");
 
         let members_iter = relation.members().map(|member| {
             let type_ = match member.member_type {
@@ -251,19 +243,14 @@ impl ElementSink {
                 RelMemberType::Relation => OSMType::Relation,
             };
 
-            let role = match member.role() {
-                Ok(role) => Some(role.to_string()),
-                Err(_) => None,
-            };
+            let role = member.role().ok();
             (type_, member.member_id, role)
         });
 
         let est_size_bytes = self.osm_builder.append_row(
             relation.id(),
             OSMType::Relation,
-            relation
-                .tags()
-                .map(|(key, value)| (key.to_string(), value.to_string())),
+            relation.tags(),
             None,
             None,
             std::iter::empty(),
