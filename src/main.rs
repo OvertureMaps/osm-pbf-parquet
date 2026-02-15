@@ -9,6 +9,7 @@ fn main() -> OsmPbfParquetResult<()> {
     Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let args = Args::parse();
+    args.validate()?;
     println!("{:?}", args);
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
