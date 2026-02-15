@@ -97,6 +97,11 @@ impl Args {
                 "file_target_mb must be greater than 0".to_string(),
             ));
         }
+        if self.compression > 22 {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "compression must be between 0 and 22".to_string(),
+            ));
+        }
         if let Some(input_buffer_size_mb) = self.input_buffer_size_mb
             && input_buffer_size_mb == 0
         {
