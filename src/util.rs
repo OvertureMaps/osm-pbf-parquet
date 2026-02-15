@@ -101,13 +101,25 @@ impl Args {
     }
 
     fn validate_scheme(path: &str) -> OsmPbfParquetResult<()> {
-        if let Ok(url) = Url::parse(path)
-            && url.scheme() != "s3"
-        {
-            return Err(OsmPbfParquetError::InvalidArgument(format!(
-                "unsupported URL scheme '{}', only s3:// and local paths are supported",
-                url.scheme()
-            )));
+        // Only treat the input as a URL if it clearly looks like one (contains "://").
+        // This avoids misclassifying Windows-style paths like "C:\\file.pbf" as URLs.
+        if path.contains("://") {
+            match Url::parse(path) {
+                Ok(url) => {
+                    if url.scheme() != "s3" {
+                        return Err(OsmPbfParquetError::InvalidArgument(format!(
+                            "unsupported URL scheme '{}', only s3:// and local paths are supported",
+                            url.scheme()
+                        )));
+                    }
+                }
+                Err(_) => {
+                    return Err(OsmPbfParquetError::InvalidArgument(format!(
+                        "invalid URL '{}', only s3:// and local paths are supported",
+                        path
+                    )));
+                }
+            }
         }
         Ok(())
     }
