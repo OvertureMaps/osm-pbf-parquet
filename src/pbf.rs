@@ -16,11 +16,12 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use crate::error::{OsmPbfParquetError, OsmPbfParquetResult};
 use crate::osm_arrow::OSMType;
 use crate::sink::ElementSink;
 use crate::util::{ARGS, ELEMENT_COUNTER, SinkpoolStore};
 
-pub async fn create_s3_buf_reader(url: Url) -> Result<BufReader, anyhow::Error> {
+pub async fn create_s3_buf_reader(url: Url) -> OsmPbfParquetResult<BufReader> {
     let s3_store = AmazonS3Builder::from_env().with_url(url.clone()).build()?;
     let path = Path::parse(url.path())?;
     let meta = s3_store.head(&path).await?;
@@ -33,7 +34,7 @@ pub async fn create_s3_buf_reader(url: Url) -> Result<BufReader, anyhow::Error> 
     ))
 }
 
-pub async fn create_local_buf_reader(path: &str) -> Result<BufReader, anyhow::Error> {
+pub async fn create_local_buf_reader(path: &str) -> OsmPbfParquetResult<BufReader> {
     let local_store: LocalFileSystem = LocalFileSystem::new();
     let path = std::path::Path::new(path);
     let filesystem_path = object_store::path::Path::from_filesystem_path(path)?;
@@ -50,7 +51,7 @@ pub async fn create_local_buf_reader(path: &str) -> Result<BufReader, anyhow::Er
 pub async fn process_blobs(
     buf_reader: BufReader,
     sinkpools: Arc<SinkpoolStore>,
-) -> Result<(), anyhow::Error> {
+) -> OsmPbfParquetResult<()> {
     let mut blob_reader = AsyncBlobReader::new(buf_reader);
 
     let stream = blob_reader.stream();
@@ -74,7 +75,7 @@ pub async fn process_blobs(
     while let Some(Ok(blob)) = stream.next().await {
         let sinkpools = sinkpools.clone();
         let filenums = filenums.clone();
-        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        let permit = semaphore.clone().acquire_owned().await?;
         join_set.spawn(async move {
             let result = match blob.decode() {
                 Ok(BlobDecode::OsmHeader(_)) => Ok(()),
@@ -82,9 +83,9 @@ pub async fn process_blobs(
                     process_block(block, sinkpools, filenums).await.map(|_| ())
                 }
                 Ok(BlobDecode::Unknown(unknown)) => {
-                    Err(anyhow::anyhow!("Unknown blob type: {}", unknown))
+                    Err(OsmPbfParquetError::UnknownBlobType(unknown.to_string()))
                 }
-                Err(error) => Err(anyhow::anyhow!("Error decoding blob: {}", error)),
+                Err(error) => Err(OsmPbfParquetError::BlobDecode(error.to_string())),
             };
             drop(permit);
             result
@@ -127,11 +128,11 @@ pub async fn monitor(sinkpools: Arc<SinkpoolStore>, cancel: CancellationToken) {
 pub async fn finish_sinks(
     sinkpools: Arc<SinkpoolStore>,
     force_finish: bool,
-) -> Result<(), anyhow::Error> {
+) -> OsmPbfParquetResult<()> {
     let handle = Handle::current();
     let mut join_set = JoinSet::new();
     for sinkpool in sinkpools.values() {
-        let mut pool = sinkpool.lock().unwrap();
+        let mut pool = sinkpool.lock().expect("sinkpool mutex lock failed");
         let sinks = pool.drain(..).collect::<Vec<_>>();
         for mut sink in sinks {
             if force_finish || sink.last_write_cycle.elapsed().as_secs() > 30 {
@@ -139,7 +140,7 @@ pub async fn finish_sinks(
                 join_set.spawn_on(
                     async move {
                         sink.finish().await?;
-                        Ok::<(), anyhow::Error>(())
+                        Ok::<(), OsmPbfParquetError>(())
                     },
                     &handle,
                 );
@@ -159,9 +160,11 @@ fn get_sink_from_pool(
     osm_type: OSMType,
     sinkpools: &SinkpoolStore,
     filenums: &HashMap<OSMType, Arc<Mutex<u64>>>,
-) -> Result<ElementSink, anyhow::Error> {
+) -> OsmPbfParquetResult<ElementSink> {
     {
-        let mut pool = sinkpools[&osm_type].lock().unwrap();
+        let mut pool = sinkpools[&osm_type]
+            .lock()
+            .expect("sinkpool mutex lock failed");
         if let Some(sink) = pool.pop() {
             return Ok(sink);
         }
@@ -171,7 +174,9 @@ fn get_sink_from_pool(
 
 fn add_sink_to_pool(sink: ElementSink, sinkpools: &SinkpoolStore) {
     let osm_type = sink.osm_type.clone();
-    let mut pool = sinkpools[&osm_type].lock().unwrap();
+    let mut pool = sinkpools[&osm_type]
+        .lock()
+        .expect("sinkpool mutex lock failed");
     pool.push(sink);
 }
 
@@ -179,7 +184,7 @@ async fn process_block(
     block: PrimitiveBlock,
     sinkpools: Arc<SinkpoolStore>,
     filenums: Arc<HashMap<OSMType, Arc<Mutex<u64>>>>,
-) -> Result<u64, anyhow::Error> {
+) -> OsmPbfParquetResult<u64> {
     let mut node_sink = get_sink_from_pool(OSMType::Node, &sinkpools, &filenums)?;
     let mut way_sink = get_sink_from_pool(OSMType::Way, &sinkpools, &filenums)?;
     let mut rel_sink = get_sink_from_pool(OSMType::Relation, &sinkpools, &filenums)?;

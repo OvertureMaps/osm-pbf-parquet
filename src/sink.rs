@@ -12,6 +12,7 @@ use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 use url::Url;
 
+use crate::error::{OsmPbfParquetError, OsmPbfParquetResult};
 use crate::osm_arrow::{OSMArrowBuilder, OSMType, cached_osm_schema};
 use crate::util::ARGS;
 
@@ -33,7 +34,7 @@ pub struct ElementSink {
 }
 
 impl ElementSink {
-    pub fn new(filenum: Arc<Mutex<u64>>, osm_type: OSMType) -> Result<Self, anyhow::Error> {
+    pub fn new(filenum: Arc<Mutex<u64>>, osm_type: OSMType) -> OsmPbfParquetResult<Self> {
         let args = ARGS.get().expect("ARGS not initialized");
 
         let full_path = Self::create_full_path(&args.output, &osm_type, &filenum, args.compression);
@@ -55,24 +56,36 @@ impl ElementSink {
         })
     }
 
-    pub async fn finish(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn finish(&mut self) -> OsmPbfParquetResult<()> {
         self.finish_batch().await?;
-        self.writer.take().unwrap().close().await?;
+        self.writer
+            .take()
+            .ok_or(OsmPbfParquetError::WriterClosed)?
+            .close()
+            .await?;
         Ok(())
     }
 
-    async fn finish_batch(&mut self) -> Result<(), anyhow::Error> {
+    async fn finish_batch(&mut self) -> OsmPbfParquetResult<()> {
         if self.estimated_record_batch_bytes == 0 {
             // Nothing to write
             return Ok(());
         }
         let batch = self.osm_builder.finish()?;
-        self.writer.as_mut().unwrap().write(&batch).await?;
+        self.writer
+            .as_mut()
+            .ok_or(OsmPbfParquetError::WriterClosed)?
+            .write(&batch)
+            .await?;
 
         // Reset writer to new path if needed
         self.estimated_file_bytes += self.estimated_record_batch_bytes;
         if self.estimated_file_bytes >= self.target_file_bytes {
-            self.writer.take().unwrap().close().await?;
+            self.writer
+                .take()
+                .ok_or(OsmPbfParquetError::WriterClosed)?
+                .close()
+                .await?;
 
             // Create new writer and output
             let args = ARGS.get().expect("ARGS not initialized");
@@ -95,7 +108,7 @@ impl ElementSink {
         Ok(())
     }
 
-    pub async fn increment_and_cycle(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn increment_and_cycle(&mut self) -> OsmPbfParquetResult<()> {
         self.last_write_cycle = Instant::now();
         if self.estimated_record_batch_bytes >= self.target_record_batch_bytes {
             self.finish_batch().await?;
@@ -103,8 +116,7 @@ impl ElementSink {
         Ok(())
     }
 
-    fn create_buf_writer(full_path: &str) -> Result<BufWriter, anyhow::Error> {
-        // TODO - better validation of URL/paths here and error handling
+    fn create_buf_writer(full_path: &str) -> OsmPbfParquetResult<BufWriter> {
         if let Ok(url) = Url::parse(full_path) {
             let s3_store = AmazonS3Builder::from_env().with_url(url.clone()).build()?;
             let path = Path::parse(url.path())?;
@@ -123,7 +135,7 @@ impl ElementSink {
         buffer: BufWriter,
         compression: u8,
         max_row_group_rows: Option<usize>,
-    ) -> Result<AsyncArrowWriter<BufWriter>, anyhow::Error> {
+    ) -> OsmPbfParquetResult<AsyncArrowWriter<BufWriter>> {
         let mut props_builder = WriterProperties::builder();
         if compression == 0 {
             props_builder = props_builder.set_compression(Compression::UNCOMPRESSED);
@@ -156,7 +168,7 @@ impl ElementSink {
         filenum: &Arc<Mutex<u64>>,
         is_zstd_compression: bool,
     ) -> String {
-        let mut num = filenum.lock().unwrap();
+        let mut num = filenum.lock().expect("filenum mutex lock failed");
         let compression_stem = if is_zstd_compression { ".zstd" } else { "" };
         let path = format!(
             "/type={}/{}_{:04}{}.parquet",
@@ -263,5 +275,67 @@ impl ElementSink {
             Some(info.visible()),
         );
         self.estimated_record_batch_bytes += est_size_bytes;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_trailing_path_with_compression() {
+        let filenum = Arc::new(Mutex::new(0u64));
+        let path = ElementSink::new_trailing_path(&OSMType::Node, &filenum, true);
+        assert_eq!(path, "/type=node/node_0000.zstd.parquet");
+        assert_eq!(*filenum.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_trailing_path_without_compression() {
+        let filenum = Arc::new(Mutex::new(0u64));
+        let path = ElementSink::new_trailing_path(&OSMType::Way, &filenum, false);
+        assert_eq!(path, "/type=way/way_0000.parquet");
+    }
+
+    #[test]
+    fn test_trailing_path_increments_filenum() {
+        let filenum = Arc::new(Mutex::new(0u64));
+        ElementSink::new_trailing_path(&OSMType::Node, &filenum, false);
+        ElementSink::new_trailing_path(&OSMType::Node, &filenum, false);
+        let path = ElementSink::new_trailing_path(&OSMType::Node, &filenum, false);
+        assert_eq!(path, "/type=node/node_0002.parquet");
+        assert_eq!(*filenum.lock().unwrap(), 3);
+    }
+
+    #[test]
+    fn test_full_path_local() {
+        let filenum = Arc::new(Mutex::new(0u64));
+        let path = ElementSink::create_full_path("./output", &OSMType::Node, &filenum, 3);
+        assert_eq!(path, "./output/type=node/node_0000.zstd.parquet");
+    }
+
+    #[test]
+    fn test_full_path_trailing_slash() {
+        let filenum = Arc::new(Mutex::new(0u64));
+        let path = ElementSink::create_full_path("./output/", &OSMType::Way, &filenum, 0);
+        assert_eq!(path, "./output/type=way/way_0000.parquet");
+    }
+
+    #[test]
+    fn test_full_path_s3() {
+        let filenum = Arc::new(Mutex::new(0u64));
+        let path =
+            ElementSink::create_full_path("s3://bucket/prefix", &OSMType::Relation, &filenum, 3);
+        assert_eq!(
+            path,
+            "s3://bucket/prefix/type=relation/relation_0000.zstd.parquet"
+        );
+    }
+
+    #[test]
+    fn test_full_path_no_compression() {
+        let filenum = Arc::new(Mutex::new(0u64));
+        let path = ElementSink::create_full_path("./out", &OSMType::Node, &filenum, 0);
+        assert_eq!(path, "./out/type=node/node_0000.parquet");
     }
 }

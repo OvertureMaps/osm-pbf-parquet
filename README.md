@@ -77,11 +77,11 @@ SELECT * FROM osm LIMIT 10;
 ```
 
 ## Development
-1. [Install rust](https://www.rust-lang.org/tools/install)
+1. [Install rust](https://www.rust-lang.org/tools/install) and [just](https://github.com/casey/just)
 2. Clone repo `git clone https://github.com/OvertureMaps/osm-pbf-parquet.git`
 3. Make changes
 4. Run against PBF with `cargo run -- --input your.osm.pbf` ([Geofabrik regional PBF extracts here](https://download.geofabrik.de/))
-5. Test with `cd test && ./prepare.sh && python3 validate.py`
+5. Run `just --list` to see available dev commands (`just test`, `just clippy`, `just ci-test`, etc.)
 
 
 ## Benchmarks
