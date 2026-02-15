@@ -97,6 +97,27 @@ impl Args {
                 "file_target_mb must be greater than 0".to_string(),
             ));
         }
+        if let Some(input_buffer_size_mb) = self.input_buffer_size_mb
+            && input_buffer_size_mb == 0
+        {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "input_buffer_size_mb must be greater than 0".to_string(),
+            ));
+        }
+        if let Some(record_batch_target_mb) = self.record_batch_target_mb
+            && record_batch_target_mb == 0
+        {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "record_batch_target_mb must be greater than 0".to_string(),
+            ));
+        }
+        if let Some(max_row_group_count) = self.max_row_group_count
+            && max_row_group_count == 0
+        {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "max_row_group_count must be greater than 0".to_string(),
+            ));
+        }
         Ok(())
     }
 
