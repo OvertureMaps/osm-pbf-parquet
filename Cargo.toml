@@ -6,28 +6,28 @@ edition = "2024"
 [dependencies]
 arrow-array = "57.3.0"
 arrow-schema = "57.3.0"
-bytes = "1.*"
-clap = { version = "4.*", features = ["derive"] }
-env_logger = "0.11.*"
-flate2 = { version = "1.*", features = ["zlib-ng"], default-features = false }
-futures = "0.3.*"
-futures-util = "0.3.*"
-log = "0.4.*"
+bytes = "1.11.1"
+clap = { version = "4.5.58", features = ["derive"] }
+env_logger = "0.11.9"
+flate2 = { version = "1.1.9", features = ["zlib-ng"], default-features = false }
+futures = "0.3.32"
+futures-util = "0.3.32"
+log = "0.4.29"
 object_store = { version = "0.13", features = ["aws"] }
 # TODO - move this upstream once https://github.com/b-r-u/osmpbf/pull/48 is landed
-osmpbf = { version = "0.3.*", features = [
+osmpbf = { version = "0.3.7", features = [
     "zlib-ng",
     "async",
 ], default-features = false, git = "https://github.com/brad-richardson/osmpbf.git", branch = "async-blob-reader" }
-parquet = { version = "57.*", features = ["async"] }
-sysinfo = "0.38.*"
+parquet = { version = "57.3.0", features = ["async"] }
+sysinfo = "0.38.2"
 thiserror = "2.0.18"
-tokio = { version = "1.*", features = ["rt", "rt-multi-thread", "io-util"] }
-tokio-util = { version = "0.7.*", features = ["io-util"] }
-url = "2.*"
+tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "io-util"] }
+tokio-util = { version = "0.7.18", features = ["io-util"] }
+url = "2.5.8"
 
 [dev-dependencies]
-criterion = { version = "0.5.*", features = ["async_futures", "async_tokio"] }
+criterion = { version = "0.8.2", features = ["async_futures", "async_tokio"] }
 
 [lib]
 name = "osm_pbf_parquet"
