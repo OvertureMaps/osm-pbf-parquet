@@ -5,8 +5,10 @@ use std::sync::{Arc, Mutex};
 
 use clap::Parser;
 use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind, System};
+use url::Url;
 
 use crate::ElementSink;
+use crate::error::{OsmPbfParquetError, OsmPbfParquetResult};
 use crate::osm_arrow::OSMType;
 
 pub type SinkpoolStore = HashMap<OSMType, Arc<Mutex<Vec<ElementSink>>>>;
@@ -75,6 +77,79 @@ impl Args {
         }
     }
 
+    pub fn validate(&self) -> OsmPbfParquetResult<()> {
+        if !self.input.ends_with(".pbf") && !self.input.ends_with(".osm.pbf") {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "input must end with .pbf or .osm.pbf".to_string(),
+            ));
+        }
+        Self::validate_scheme(&self.input)?;
+        Self::validate_scheme(&self.output)?;
+        if let Some(threads) = self.worker_threads
+            && threads == 0
+        {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "worker_threads must be greater than 0".to_string(),
+            ));
+        }
+        if self.file_target_mb == 0 {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "file_target_mb must be greater than 0".to_string(),
+            ));
+        }
+        if self.compression > 22 {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "compression must be between 0 and 22".to_string(),
+            ));
+        }
+        if let Some(input_buffer_size_mb) = self.input_buffer_size_mb
+            && input_buffer_size_mb == 0
+        {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "input_buffer_size_mb must be greater than 0".to_string(),
+            ));
+        }
+        if let Some(record_batch_target_mb) = self.record_batch_target_mb
+            && record_batch_target_mb == 0
+        {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "record_batch_target_mb must be greater than 0".to_string(),
+            ));
+        }
+        if let Some(max_row_group_count) = self.max_row_group_count
+            && max_row_group_count == 0
+        {
+            return Err(OsmPbfParquetError::InvalidArgument(
+                "max_row_group_count must be greater than 0".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_scheme(path: &str) -> OsmPbfParquetResult<()> {
+        // Only treat the input as a URL if it clearly looks like one (contains "://").
+        // This avoids misclassifying Windows-style paths like "C:\\file.pbf" as URLs.
+        if path.contains("://") {
+            match Url::parse(path) {
+                Ok(url) => {
+                    if url.scheme() != "s3" {
+                        return Err(OsmPbfParquetError::InvalidArgument(format!(
+                            "unsupported URL scheme '{}', only s3:// and local paths are supported",
+                            url.scheme()
+                        )));
+                    }
+                }
+                Err(_) => {
+                    return Err(OsmPbfParquetError::InvalidArgument(format!(
+                        "invalid URL '{}', only s3:// and local paths are supported",
+                        path
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn get_worker_threads(&self) -> usize {
         self.worker_threads.unwrap_or_else(|| {
             let system = System::new_with_specifics(
@@ -110,4 +185,60 @@ fn default_record_batch_size_mb() -> usize {
     let cpu_count = system.cpus().len();
     // Estimate per thread available memory, leaving overhead for copies and system processes
     (total_memory_mb / cpu_count) / 8usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_args() -> Args {
+        Args::new("test.osm.pbf".to_string(), "./out".to_string(), 3)
+    }
+
+    #[test]
+    fn test_validate_valid_pbf() {
+        let args = Args::new("file.pbf".to_string(), "./out".to_string(), 3);
+        assert!(args.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_valid_osm_pbf() {
+        assert!(valid_args().validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_input_extension() {
+        let args = Args::new("file.xml".to_string(), "./out".to_string(), 3);
+        let err = args.validate().unwrap_err();
+        assert!(matches!(err, OsmPbfParquetError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn test_validate_worker_threads_zero() {
+        let mut args = valid_args();
+        args.worker_threads = Some(0);
+        let err = args.validate().unwrap_err();
+        assert!(matches!(err, OsmPbfParquetError::InvalidArgument(_)));
+    }
+
+    #[test]
+    fn test_validate_worker_threads_valid() {
+        let mut args = valid_args();
+        args.worker_threads = Some(4);
+        assert!(args.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_worker_threads_none() {
+        let args = valid_args();
+        assert!(args.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_file_target_mb_zero() {
+        let mut args = valid_args();
+        args.file_target_mb = 0;
+        let err = args.validate().unwrap_err();
+        assert!(matches!(err, OsmPbfParquetError::InvalidArgument(_)));
+    }
 }

@@ -1,13 +1,13 @@
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 
-use arrow::array::builder::{
-    BooleanBuilder, Int64Builder, ListBuilder, MapBuilder, StringBuilder, StructBuilder,
+use arrow_array::builder::{
+    BooleanBuilder, Float64Builder, Int32Builder, Int64Builder, ListBuilder, MapBuilder,
+    StringBuilder, StructBuilder, TimestampMillisecondBuilder,
 };
-use arrow::array::{ArrayRef, Float64Builder, Int32Builder, TimestampMillisecondBuilder};
-use arrow::datatypes::{DataType, Field, Fields, Schema, TimeUnit};
-use arrow::error::ArrowError;
-use arrow::record_batch::RecordBatch;
+use arrow_array::{ArrayRef, RecordBatch};
+use arrow_schema::ArrowError;
+use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum OSMType {
@@ -203,7 +203,7 @@ impl OSMArrowBuilder {
             est_size_bytes += 8usize;
             struct_builder
                 .field_builder::<Int64Builder>(0)
-                .unwrap()
+                .expect("struct field type/index mismatch")
                 .append_value(node_id);
             struct_builder.append(true);
         }
@@ -216,17 +216,17 @@ impl OSMArrowBuilder {
 
             members_struct_builder
                 .field_builder::<StringBuilder>(0)
-                .unwrap()
+                .expect("struct field type/index mismatch")
                 .append_value(osm_type.as_str());
 
             members_struct_builder
                 .field_builder::<Int64Builder>(1)
-                .unwrap()
+                .expect("struct field type/index mismatch")
                 .append_value(ref_);
 
             members_struct_builder
                 .field_builder::<StringBuilder>(2)
-                .unwrap()
+                .expect("struct field type/index mismatch")
                 .append_option(role);
 
             members_struct_builder.append(true);

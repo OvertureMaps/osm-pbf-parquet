@@ -34,6 +34,8 @@ jobs:
     - uses: astral-sh/setup-uv@v5
     - name: Build
       run: cargo build --release
+    - name: Run unit tests
+      run: cargo test
     - name: Install osmium
       run: sudo apt-get update && sudo apt-get install -y osmium-tool
     - name: Prepare and run test

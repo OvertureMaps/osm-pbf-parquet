@@ -5,10 +5,12 @@ use tokio::runtime::Handle;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+pub mod error;
 pub mod osm_arrow;
 pub mod pbf;
 pub mod sink;
 pub mod util;
+
 use crate::osm_arrow::OSMType;
 use crate::pbf::{
     create_local_buf_reader, create_s3_buf_reader, finish_sinks, monitor, process_blobs,
@@ -16,8 +18,10 @@ use crate::pbf::{
 use crate::sink::ElementSink;
 use crate::util::{ARGS, Args, SinkpoolStore};
 
-pub async fn pbf_driver(args: Args) -> Result<(), anyhow::Error> {
-    // TODO - validation of args
+pub use error::{OsmPbfParquetError, OsmPbfParquetResult};
+
+pub async fn pbf_driver(args: Args) -> OsmPbfParquetResult<()> {
+    args.validate()?;
     // Store value for reading across threads (write-once)
     let _ = ARGS.set(args.clone());
 
