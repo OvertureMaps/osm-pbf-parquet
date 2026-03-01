@@ -35,7 +35,7 @@ jobs:
     - name: Build
       run: cargo build --release -p osm-pbf-parquet
     - name: Run unit tests
-      run: cargo test -p osm-pbf-parquet
+      run: cargo test --workspace
     - name: Install osmium
       run: sudo apt-get update && sudo apt-get install -y osmium-tool
     - name: Prepare and run test
