@@ -21,9 +21,9 @@ jobs:
         components: clippy, rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Run clippy
-      run: cargo clippy --all-targets
+      run: cargo clippy --all-targets -p osm-pbf-parquet
     - name: Run cargo fmt
-      run: cargo fmt --all -- --check
+      run: cargo fmt -p osm-pbf-parquet -- --check
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -33,13 +33,13 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - uses: astral-sh/setup-uv@v7
     - name: Build
-      run: cargo build --release
+      run: cargo build --release -p osm-pbf-parquet
     - name: Run unit tests
-      run: cargo test
+      run: cargo test --workspace
     - name: Install osmium
       run: sudo apt-get update && sudo apt-get install -y osmium-tool
     - name: Prepare and run test
       run: ./test.sh
-      working-directory: ./test
+      working-directory: ./osm-pbf-parquet/test
     - name: Benchmark
-      run: cargo bench
+      run: cargo bench -p osm-pbf-parquet
