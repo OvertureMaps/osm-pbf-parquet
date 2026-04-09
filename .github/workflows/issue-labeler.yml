@@ -13,7 +13,10 @@ permissions:
 jobs:
   label-issues-policy:
     name: Label issues with policy
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        template: [ bug.yml, feature.yml, animals.yml, phase_of_development.yml ]
     permissions:
       issues: write # Required for labeling issues
       id-token: write # Required for OIDC authentication
@@ -41,6 +44,9 @@ jobs:
   label-issues-default-policy:
     name: Label issues with default policy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        template: [ default-policy.yml ]
     permissions:
       issues: write # Required for labeling issues
       id-token: write # Required for OIDC authentication
@@ -67,6 +73,9 @@ jobs:
   label-issues-without-policy:
     name: Label issues without policy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        template: [ default.yml ]
     permissions:
       issues: write # Required for labeling issues
       id-token: write # Required for OIDC authentication
