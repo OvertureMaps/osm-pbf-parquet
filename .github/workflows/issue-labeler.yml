@@ -8,74 +8,61 @@ on:
     types: [ opened ]
 
 permissions:
-  issues: write
-  contents: read
-  id-token: write
+  contents: read # Required for checking out repo content
 
 jobs:
-  label-issues-policy:
+  label-issues:
+    name: Label issues
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
-        template: [ bug.yml, feature.yml, animals.yml, phase_of_development.yml ]
-
+        template: [ action_item.yaml, bug.yml, default.yml, documentation.yaml, feature.yml, phase_of_development.yml, question.yaml, release-feedback.yaml ]
+    permissions:
+      issues: write # Required for labeling issues
+      id-token: write # Required for OIDC authentication
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.issue.number }}
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Parse issue form
-        uses: stefanbuck/github-issue-parser@v3
+        uses: stefanbuck/github-issue-parser@10dcc54158ba4c137713d9d69d70a2da63b6bda3 # v3.2.3
         id: issue-parser
         with:
           template-path: .github/ISSUE_TEMPLATE/${{ matrix.template }}
 
       - name: Set labels based on policy
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@main
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@b80ae64e3e156e9c111b075bfa04b295d54e8e2e # v3.2.4
         with:
           issue-form: ${{ steps.issue-parser.outputs.jsonString }}
           template: ${{ matrix.template }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  label-issues-default-policy:
+  label-issues-default:
+    name: Label issues (default)
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        template: [ default-policy.yml ]
-
+    permissions:
+      issues: write # Required for labeling issues
+      id-token: write # Required for OIDC authentication
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.issue.number }}
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Parse issue form
-        uses: stefanbuck/github-issue-parser@v3
+        uses: stefanbuck/github-issue-parser@10dcc54158ba4c137713d9d69d70a2da63b6bda3 # v3.2.3
         id: issue-parser
         with:
-          template-path: .github/ISSUE_TEMPLATE/${{ matrix.template }}
+          template-path: .github/ISSUE_TEMPLATE/default.yml
 
       - name: Set labels based on policy
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@main
-        with:
-          issue-form: ${{ steps.issue-parser.outputs.jsonString }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-  label-issues-without-policy:
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        template: [ default.yml ]
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Parse issue form
-        uses: stefanbuck/github-issue-parser@v3
-        id: issue-parser
-        with:
-          template-path: .github/ISSUE_TEMPLATE/${{ matrix.template }}
-
-      - name: Set labels based on policy
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@main
+        uses: redhat-plumbers-in-action/advanced-issue-labeler@b80ae64e3e156e9c111b075bfa04b295d54e8e2e # v3.2.4
         with:
           issue-form: ${{ steps.issue-parser.outputs.jsonString }}
           section: without-policy
