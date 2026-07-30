@@ -160,7 +160,7 @@ impl ElementSink {
     ) -> String {
         let trailing_path = Self::new_trailing_path(osm_type, filenum, compression != 0);
         // Remove trailing `/`s to avoid empty path segment
-        format!("{0}{trailing_path}", &output_path.trim_end_matches('/'))
+        format!("{0}{trailing_path}", output_path.trim_end_matches('/'))
     }
 
     fn new_trailing_path(
