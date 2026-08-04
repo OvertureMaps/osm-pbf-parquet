@@ -85,7 +85,11 @@ SELECT * FROM osm LIMIT 10;
 
 
 ## Benchmarks
-osm-pbf-parquet prioritizes transcode speed over file size, file count or perserving ordering. Here is a comparison against similar tools on the 2024-06-24 OSM planet PBF with target file size of 500MB:
+osm-pbf-parquet prioritizes transcode speed over file size, file count or perserving ordering.
+
+On the 2026-02-02 OSM planet PBF (91GB, 11.58B elements) with zstd:3 and 8 worker threads (Core Ultra 7 265K, 64GB, input on NVMe, output on a separate SATA SSD), osm-pbf-parquet transcodes the full planet in **11m18s** (4,580s CPU, 184GB output).
+
+Comparison against similar tools on the 2024-06-24 OSM planet PBF with target file size of 500MB:
 | | Time (wall) | Output size | File count |
 | - | - | - | - |
 | **osm-pbf-parquet** (zstd:3) | 30 minutes | 182GB | ~600 |
