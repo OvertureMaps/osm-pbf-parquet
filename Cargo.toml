@@ -2,5 +2,11 @@
 members = ["osm-pbf-parquet", "osmpbf"]
 resolver = "2"
 
+# Measured ~4% CPU reduction on transcode (cross-crate inlining into the
+# arrow builder and decode hot paths); build-time cost only affects release
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
 [workspace.dependencies]
 osmpbf = { path = "osmpbf", default-features = false, features = ["zlib-ng", "async"] }
