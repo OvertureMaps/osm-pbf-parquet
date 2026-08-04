@@ -572,20 +572,28 @@ impl AsyncBlobReader {
             None => return None,
         };
 
-        let mut buffer = vec![0; header.datasize() as usize];
-        let read_result = self.reader.read_exact(&mut buffer).await;
-        match read_result {
-            Ok(read_byte_count) => {
-                if read_byte_count != header.datasize() as usize {
-                    return Some(Err(new_blob_error(BlobError::InvalidHeaderSize)));
+        // Read into an uninitialized BytesMut (no zero-fill) and parse with
+        // parse_from_tokio_bytes so the compressed payload is a zero-copy,
+        // refcounted slice of this buffer instead of a fresh allocation.
+        let datasize = header.datasize() as usize;
+        let mut buffer = bytes::BytesMut::with_capacity(datasize);
+        {
+            use bytes::BufMut;
+            let mut limited = (&mut buffer).limit(datasize);
+            while limited.has_remaining_mut() {
+                match self.reader.read_buf(&mut limited).await {
+                    Ok(0) => {
+                        return Some(Err(new_blob_error(BlobError::InvalidHeaderSize)));
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        return Some(Err(e.into()));
+                    }
                 }
-            }
-            Err(e) => {
-                return Some(Err(e.into()));
             }
         }
 
-        let blob = match fileformat::Blob::parse_from_bytes(&buffer) {
+        let blob = match fileformat::Blob::parse_from_tokio_bytes(&buffer.freeze()) {
             Ok(blob) => blob,
             Err(e) => {
                 self.offset = None;
@@ -659,15 +667,40 @@ pub(crate) fn decode_blob<T: Message>(blob: &fileformat::Blob) -> Result<T> {
             }
         }
         Some(fileformat::blob::Data::ZlibData(bytes)) => {
-            let mut decoder = ZlibDecoder::new(&**bytes).take(MAX_BLOB_MESSAGE_SIZE);
-            let mut decoded_bytes = Vec::with_capacity(bytes.len());
-            decoder.read_to_end(&mut decoded_bytes)?;
+            let decoded_bytes = decompress_zlib(bytes, blob.raw_size)?;
 
             T::parse_from_tokio_bytes(&Bytes::from(decoded_bytes))
                 .map_err(|e| new_protobuf_error(e, "blob zlib data"))
         }
         _ => Err(new_blob_error(BlobError::Empty)),
     }
+}
+
+/// Decompress a zlib-compressed blob payload.
+///
+/// When the blob carries `raw_size` (the exact uncompressed size, set by all
+/// mainstream OSM writers) we can decompress in a single shot into an
+/// exact-sized buffer with libdeflate, which is significantly faster than
+/// streaming inflate. Fall back to streaming flate2 when `raw_size` is
+/// missing or inconsistent.
+fn decompress_zlib(bytes: &Bytes, raw_size: Option<i32>) -> Result<Vec<u8>> {
+    if let Some(raw_size) = raw_size {
+        let size = raw_size as u64;
+        if size >= MAX_BLOB_MESSAGE_SIZE {
+            return Err(new_blob_error(BlobError::MessageTooBig { size }));
+        }
+        let mut decoded_bytes = vec![0u8; raw_size as usize];
+        let mut decompressor = libdeflater::Decompressor::new();
+        match decompressor.zlib_decompress(bytes, &mut decoded_bytes) {
+            Ok(len) if len == decoded_bytes.len() => return Ok(decoded_bytes),
+            // raw_size mismatch: fall through to the streaming path
+            _ => {}
+        }
+    }
+    let mut decoder = ZlibDecoder::new(&**bytes).take(MAX_BLOB_MESSAGE_SIZE);
+    let mut decoded_bytes = Vec::with_capacity(bytes.len() * 3);
+    decoder.read_to_end(&mut decoded_bytes)?;
+    Ok(decoded_bytes)
 }
 
 #[cfg(test)]
