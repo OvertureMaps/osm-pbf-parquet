@@ -1627,6 +1627,7 @@ name = "osm-pbf-parquet"
 version = "0.2.0"
 dependencies = [
  "arrow-array",
+ "arrow-buffer",
  "arrow-schema",
  "bytes",
  "clap 4.6.5",

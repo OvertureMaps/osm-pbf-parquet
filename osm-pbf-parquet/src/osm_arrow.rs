@@ -1,11 +1,13 @@
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 
+use arrow_array::builder::ArrayBuilder;
 use arrow_array::builder::{
-    BooleanBuilder, Float64Builder, Int32Builder, Int64Builder, ListBuilder, MapBuilder,
-    StringBuilder, StructBuilder, TimestampMillisecondBuilder,
+    BooleanBuilder, Float64Builder, Int32Builder, Int64Builder, MapBuilder, StringBuilder,
+    TimestampMillisecondBuilder,
 };
-use arrow_array::{ArrayRef, RecordBatch};
+use arrow_array::{Array, ArrayRef, ListArray, RecordBatch, StructArray};
+use arrow_buffer::{OffsetBuffer, ScalarBuffer};
 use arrow_schema::ArrowError;
 use arrow_schema::{DataType, Field, Fields, Schema, TimeUnit};
 
@@ -116,8 +118,15 @@ pub struct OSMArrowBuilder {
     tags_builder: MapBuilder<StringBuilder, StringBuilder>,
     lat_builder: Float64Builder,
     lon_builder: Float64Builder,
-    nodes_builder: ListBuilder<StructBuilder>,
-    members_builder: ListBuilder<StructBuilder>,
+    // `nds` and `members` list columns are built from typed child builders
+    // plus manually-tracked offsets. This avoids the per-element dynamic
+    // downcast that `ListBuilder<StructBuilder>::field_builder` performs.
+    nodes_ref_builder: Int64Builder,
+    nodes_offsets: Vec<i32>,
+    members_type_builder: StringBuilder,
+    members_ref_builder: Int64Builder,
+    members_role_builder: StringBuilder,
+    members_offsets: Vec<i32>,
     changeset_builder: Int64Builder,
     timestamp_builder: TimestampMillisecondBuilder,
     uid_builder: Int32Builder,
@@ -139,18 +148,12 @@ impl OSMArrowBuilder {
             tags_builder: MapBuilder::new(None, StringBuilder::new(), StringBuilder::new()),
             lat_builder: Float64Builder::new(),
             lon_builder: Float64Builder::new(),
-            nodes_builder: ListBuilder::new(StructBuilder::from_fields(
-                vec![Field::new("ref", DataType::Int64, true)],
-                0,
-            )),
-            members_builder: ListBuilder::new(StructBuilder::from_fields(
-                vec![
-                    Field::new("type", DataType::Utf8, true),
-                    Field::new("ref", DataType::Int64, true),
-                    Field::new("role", DataType::Utf8, true),
-                ],
-                0,
-            )),
+            nodes_ref_builder: Int64Builder::new(),
+            nodes_offsets: vec![0],
+            members_type_builder: StringBuilder::new(),
+            members_ref_builder: Int64Builder::new(),
+            members_role_builder: StringBuilder::new(),
+            members_offsets: vec![0],
             changeset_builder: Int64Builder::new(),
             timestamp_builder: TimestampMillisecondBuilder::new(),
             uid_builder: Int32Builder::new(),
@@ -197,41 +200,21 @@ impl OSMArrowBuilder {
         self.lat_builder.append_option(lat);
         self.lon_builder.append_option(lon);
 
-        // Derived from https://docs.rs/arrow/latest/arrow/array/struct.StructBuilder.html
-        let struct_builder = self.nodes_builder.values();
         for node_id in nodes_iter {
             est_size_bytes += 8usize;
-            struct_builder
-                .field_builder::<Int64Builder>(0)
-                .expect("struct field type/index mismatch")
-                .append_value(node_id);
-            struct_builder.append(true);
+            self.nodes_ref_builder.append_value(node_id);
         }
-        self.nodes_builder.append(true);
+        self.nodes_offsets.push(self.nodes_ref_builder.len() as i32);
 
-        let members_struct_builder = self.members_builder.values();
         for (osm_type, ref_, role) in members_iter {
             // Rough size to avoid unwrapping, role should be fairly short.
             est_size_bytes += 10usize;
-
-            members_struct_builder
-                .field_builder::<StringBuilder>(0)
-                .expect("struct field type/index mismatch")
-                .append_value(osm_type.as_str());
-
-            members_struct_builder
-                .field_builder::<Int64Builder>(1)
-                .expect("struct field type/index mismatch")
-                .append_value(ref_);
-
-            members_struct_builder
-                .field_builder::<StringBuilder>(2)
-                .expect("struct field type/index mismatch")
-                .append_option(role);
-
-            members_struct_builder.append(true);
+            self.members_type_builder.append_value(osm_type.as_str());
+            self.members_ref_builder.append_value(ref_);
+            self.members_role_builder.append_option(role);
         }
-        self.members_builder.append(true);
+        self.members_offsets
+            .push(self.members_ref_builder.len() as i32);
 
         self.changeset_builder.append_option(changeset);
         self.timestamp_builder.append_option(timestamp_ms);
@@ -244,13 +227,47 @@ impl OSMArrowBuilder {
     }
 
     pub fn finish(&mut self) -> Result<RecordBatch, ArrowError> {
+        let nodes_struct = StructArray::try_new(
+            Fields::from(vec![Field::new("ref", DataType::Int64, true)]),
+            vec![Arc::new(self.nodes_ref_builder.finish()) as ArrayRef],
+            None,
+        )?;
+        let nodes_offsets = std::mem::replace(&mut self.nodes_offsets, vec![0]);
+        let nodes_array = ListArray::try_new(
+            Arc::new(Field::new("item", nodes_struct.data_type().clone(), true)),
+            OffsetBuffer::new(ScalarBuffer::from(nodes_offsets)),
+            Arc::new(nodes_struct),
+            None,
+        )?;
+
+        let members_struct = StructArray::try_new(
+            Fields::from(vec![
+                Field::new("type", DataType::Utf8, true),
+                Field::new("ref", DataType::Int64, true),
+                Field::new("role", DataType::Utf8, true),
+            ]),
+            vec![
+                Arc::new(self.members_type_builder.finish()) as ArrayRef,
+                Arc::new(self.members_ref_builder.finish()) as ArrayRef,
+                Arc::new(self.members_role_builder.finish()) as ArrayRef,
+            ],
+            None,
+        )?;
+        let members_offsets = std::mem::replace(&mut self.members_offsets, vec![0]);
+        let members_array = ListArray::try_new(
+            Arc::new(Field::new("item", members_struct.data_type().clone(), true)),
+            OffsetBuffer::new(ScalarBuffer::from(members_offsets)),
+            Arc::new(members_struct),
+            None,
+        )?;
+
         let array_refs: Vec<ArrayRef> = vec![
             Arc::new(self.id_builder.finish()),
             Arc::new(self.tags_builder.finish()),
             Arc::new(self.lat_builder.finish()),
             Arc::new(self.lon_builder.finish()),
-            Arc::new(self.nodes_builder.finish()),
-            Arc::new(self.members_builder.finish()),
+            Arc::new(nodes_array),
+            Arc::new(members_array),
             Arc::new(self.changeset_builder.finish()),
             Arc::new(self.timestamp_builder.finish()),
             Arc::new(self.uid_builder.finish()),
