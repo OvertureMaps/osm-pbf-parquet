@@ -9,6 +9,8 @@ INPUT="$1"; OUTDIR="$2"; WORKERS="$3"
 
 [[ -n "${PARQUETIZER_JAR:-}" ]] || { echo "PARQUETIZER_JAR not set" >&2; exit 2; }
 JAVA="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+# Cap the JVM's view of the machine (GC/ForkJoin pool sizing) to $WORKERS
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -XX:ActiveProcessorCount=$WORKERS"
 
 ln -sf "$INPUT" "$OUTDIR/input.osm.pbf"
 "$JAVA" -jar "$PARQUETIZER_JAR" "$OUTDIR/input.osm.pbf"

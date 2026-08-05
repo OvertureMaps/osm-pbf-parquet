@@ -15,6 +15,7 @@ BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS="osm-pbf-parquet,duckdb,osm-parquetizer,osm2orc"
 WORKERS=8
 NICENESS=10
+CPUSET=""
 LABEL="$(date +%Y%m%d-%H%M%S)"
 INPUT="" OUTPUT="" VALIDATE=0
 
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
         --tools) TOOLS="$2"; shift 2 ;;
         --workers) WORKERS="$2"; shift 2 ;;
         --nice) NICENESS="$2"; shift 2 ;;
+        --cpuset) CPUSET="$2"; shift 2 ;;
         --label) LABEL="$2"; shift 2 ;;
         --validate) VALIDATE=1; shift ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -75,8 +77,10 @@ for tool in ${TOOLS//,/ }; do
     iostat -x 5 -d "$IN_DEV" "$OUT_DEV" > "$RESULTS/$tool.iostat" 2>&1 &
     IOSTAT_PID=$!
 
+    TASKSET=()
+    [[ -n "$CPUSET" ]] && TASKSET=(taskset -c "$CPUSET")
     set +e
-    /usr/bin/time -v nice -n "$NICENESS" \
+    /usr/bin/time -v "${TASKSET[@]}" nice -n "$NICENESS" \
         "$wrapper" "$INPUT" "$outdir" "$WORKERS" > "$RESULTS/$tool.log" 2>&1
     rc=$?
     set -e
