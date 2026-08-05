@@ -1,0 +1,35 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version="0.6" generator="handcrafted">
+  <node id="101" version="3" timestamp="2020-01-02T03:04:05Z" uid="42" user="alice" changeset="9001" lat="45.5" lon="-122.25">
+    <tag k="amenity" v="cafe"/>
+    <tag k="name" v="Caf&#233; M&#252;nchen &#127860;"/>
+  </node>
+  <node id="102" version="1" timestamp="2021-06-07T08:09:10Z" uid="7" user="b&#248;b" changeset="9002" lat="-33.8688" lon="151.2093"/>
+  <node id="103" version="2" timestamp="2022-11-12T13:14:15Z" uid="42" user="alice" changeset="9003" lat="0.0000001" lon="0.0000001">
+    <tag k="note" v=""/>
+  </node>
+  <node id="104" version="1" timestamp="2019-03-04T05:06:07Z" uid="99" user="carol" changeset="9004" lat="89.9999999" lon="179.9999999"/>
+  <node id="105" version="1" timestamp="2019-03-04T05:06:08Z" uid="99" user="carol" changeset="9004" lat="-89.9999999" lon="-179.9999999"/>
+  <way id="201" version="5" timestamp="2020-05-06T07:08:09Z" uid="42" user="alice" changeset="9005">
+    <nd ref="101"/>
+    <nd ref="102"/>
+    <nd ref="103"/>
+    <tag k="highway" v="residential"/>
+    <tag k="name" v="Test Street"/>
+  </way>
+  <way id="202" version="1" timestamp="2021-07-08T09:10:11Z" uid="7" user="b&#248;b" changeset="9006">
+    <nd ref="104"/>
+    <nd ref="105"/>
+  </way>
+  <relation id="301" version="2" timestamp="2022-09-10T11:12:13Z" uid="99" user="carol" changeset="9007">
+    <member type="node" ref="101" role="stop"/>
+    <member type="way" ref="201" role=""/>
+    <member type="relation" ref="302" role="parent"/>
+    <tag k="type" v="route"/>
+    <tag k="route" v="bus"/>
+  </relation>
+  <relation id="302" version="1" timestamp="2023-01-02T03:04:05Z" uid="42" user="alice" changeset="9008">
+    <member type="way" ref="202" role="outer"/>
+    <tag k="type" v="multipolygon"/>
+  </relation>
+</osm>
