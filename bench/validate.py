@@ -159,11 +159,40 @@ def read_osm2orc(con, base):
     return out
 
 
+def read_sedona(con, base):
+    """Layout: kind=node|way|relation partitions (Spark partitionBy), full
+    metadata schema. Ways and relations both use refs; roles in ref_roles."""
+    out = {}
+    for t in ["node", "way", "relation"]:
+        g = os.path.join(base, f"kind={t}", "*.parquet")
+        if not glob.glob(g):
+            out[t] = None
+            continue
+        if t == "node":
+            r = q1(con, f"""SELECT count(*), sum(id), sum(cardinality(tags)), sum(uid), sum(changeset)
+                            FROM read_parquet('{g}')""")
+            out[t] = dict(zip(NODE_METRICS, r))
+        elif t == "way":
+            r = q1(con, f"""SELECT count(*), sum(id), sum(cardinality(tags)), sum(len(refs)),
+                                   sum(list_aggregate(refs, 'sum')), sum(uid), sum(changeset)
+                            FROM read_parquet('{g}')""")
+            out[t] = dict(zip(WAY_METRICS, r))
+        else:
+            r = q1(con, f"""SELECT count(*), sum(id), sum(cardinality(tags)), sum(len(refs)),
+                                   sum(list_aggregate(refs, 'sum')),
+                                   sum(list_aggregate(list_transform(ref_roles, x -> length(coalesce(x,''))), 'sum')),
+                                   sum(uid), sum(changeset)
+                            FROM read_parquet('{g}')""")
+            out[t] = dict(zip(REL_METRICS, r))
+    return out
+
+
 ADAPTERS = {
     "osm-pbf-parquet": read_osm_pbf_parquet,
     "duckdb": read_duckdb,
     "osm-parquetizer": read_osm_parquetizer,
     "osm2orc": read_osm2orc,
+    "sedona": read_sedona,
 }
 
 
@@ -223,6 +252,7 @@ def main():
     print("- duckdb (ST_ReadOSM): no changeset/timestamp/uid/user/version/visible; member types via ref_types")
     print("- osm-parquetizer: user as dictionary id (user_sid), lat/lon as latitude/longitude; no visible")
     print("- osm2orc: full schema in a single ORC file")
+    print("- sedona (osmpbf source): full metadata schema; location struct for lat/lon; member types via ref_types")
     sys.exit(exit_code)
 
 
