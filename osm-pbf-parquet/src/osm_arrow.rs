@@ -3,8 +3,8 @@ use std::sync::{Arc, LazyLock};
 
 use arrow_array::builder::ArrayBuilder;
 use arrow_array::builder::{
-    BooleanBuilder, Float64Builder, Int32Builder, Int64Builder, MapBuilder, StringBuilder,
-    TimestampMillisecondBuilder,
+    BooleanBuilder, Float64Builder, Int32Builder, Int64Builder, MapBuilder, MapFieldNames,
+    StringBuilder, TimestampMillisecondBuilder,
 };
 use arrow_array::{Array, ArrayRef, ListArray, RecordBatch, StructArray};
 use arrow_buffer::{OffsetBuffer, ScalarBuffer};
@@ -145,7 +145,17 @@ impl OSMArrowBuilder {
     pub fn new() -> Self {
         OSMArrowBuilder {
             id_builder: Int64Builder::new(),
-            tags_builder: MapBuilder::new(None, StringBuilder::new(), StringBuilder::new()),
+            // Field names pinned explicitly: MapBuilder's defaults changed
+            // from keys/values to key/value in arrow 59.2
+            tags_builder: MapBuilder::new(
+                Some(MapFieldNames {
+                    entry: "entries".to_string(),
+                    key: "keys".to_string(),
+                    value: "values".to_string(),
+                }),
+                StringBuilder::new(),
+                StringBuilder::new(),
+            ),
             lat_builder: Float64Builder::new(),
             lon_builder: Float64Builder::new(),
             nodes_ref_builder: Int64Builder::new(),
