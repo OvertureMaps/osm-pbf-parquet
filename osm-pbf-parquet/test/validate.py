@@ -51,9 +51,11 @@ pq_df = pd.read_parquet(PARQUET_DIR)
 # to match the XML conversion above (comparing datetime64 against int with
 # .eq() is always False, which the old any-column-matches check hid)
 pq_ts = pq_df["timestamp"].astype("datetime64[ms]")
-pq_df["timestamp"] = pd.Series(
-    pq_ts.to_numpy().astype("int64"), index=pq_df.index
-).mask(pq_ts.isna())
+pq_df["timestamp"] = (
+    pd.Series(pq_ts.to_numpy().astype("int64"), index=pq_df.index)
+    .astype("Int64")
+    .mask(pq_ts.isna())
+)
 
 print("Samples, metadata")
 print(xml_df.head())
@@ -102,12 +104,16 @@ print("Checking mismatched scalar values")
 
 def matches(left, right):
     # Null-safe equality: NaN != NaN in pandas, but a value missing from
-    # both sides (e.g. lat/lon on ways) is a match, not a mismatch
-    return left.eq(right) | (left.isna() & right.isna())
+    # both sides (e.g. lat/lon on ways) is a match, not a mismatch. With
+    # nullable dtypes (Int64) eq() yields pd.NA for one-sided nulls; those
+    # are genuine mismatches, so fill False
+    both_na = left.isna() & right.isna()
+    return (left.eq(right) | both_na).fillna(False).astype(bool)
 
 
 def matches_close(left, right, tolerance=1e-9):
-    return (left - right).abs().lt(tolerance) | (left.isna() & right.isna())
+    both_na = left.isna() & right.isna()
+    return ((left - right).abs().lt(tolerance) | both_na).fillna(False).astype(bool)
 
 
 # Every column must match; each is checked independently so a wrong
@@ -118,10 +124,14 @@ scalar_checks = {
     "lat": matches_close(joined["lat"], joined["lat_pq"]),
     "lon": matches_close(joined["lon"], joined["lon_pq"]),
 }
-# Geofabrik public extracts strip user metadata, so these columns only
-# exist (and get the _pq join suffix) when the source file carries them
+# Geofabrik public extracts strip user metadata, so the XML source may
+# legitimately lack these columns — but the parquet schema always carries
+# them, so their absence from the output is a bug, never a skip
 for optional_column in ["uid", "user", "changeset"]:
-    if f"{optional_column}_pq" in joined.columns:
+    assert (
+        optional_column in pq_df.columns
+    ), f"parquet output missing '{optional_column}' column"
+    if optional_column in xml_df.columns:
         scalar_checks[optional_column] = matches(
             joined[optional_column], joined[f"{optional_column}_pq"]
         )
