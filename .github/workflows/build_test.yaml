@@ -58,3 +58,20 @@ jobs:
       working-directory: ./osm-pbf-parquet/test
     - name: Benchmark
       run: cargo bench -p osm-pbf-parquet
+
+  build-and-test-arm:
+    name: Build and Test (arm64)
+    runs-on: ubuntu-24.04-arm
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+    - name: Build
+      run: cargo build --release -p osm-pbf-parquet
+    - name: Run unit tests
+      run: cargo test --workspace
