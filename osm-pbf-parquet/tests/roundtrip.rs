@@ -459,7 +459,8 @@ fn no_output_files_for_types_without_data() {
     for osm_type in ["way", "relation"] {
         let type_dir = out.join(format!("type={osm_type}"));
         let files: Vec<String> = match std::fs::read_dir(&type_dir) {
-            Err(_) => Vec::new(),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(err) => panic!("failed to read {type_dir:?}: {err}"),
             Ok(entries) => entries
                 .map(|entry| {
                     entry
