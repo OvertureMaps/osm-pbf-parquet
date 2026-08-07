@@ -47,6 +47,15 @@ xml_df = xml_df.replace({float("nan"): None})
 
 # Read in parquet data
 pq_df = pd.read_parquet(PARQUET_DIR)
+# Parquet timestamps read back as datetime64; convert to epoch milliseconds
+# to match the XML conversion above (comparing datetime64 against int with
+# .eq() is always False, which the old any-column-matches check hid)
+pq_ts = pq_df["timestamp"].astype("datetime64[ms]")
+pq_df["timestamp"] = (
+    pd.Series(pq_ts.to_numpy().astype("int64"), index=pq_df.index)
+    .astype("Int64")
+    .mask(pq_ts.isna())
+)
 
 print("Samples, metadata")
 print(xml_df.head())
@@ -91,41 +100,52 @@ if xml_missing.count().sum() > 0:
     )
 
 print("Checking mismatched scalar values")
-mismatched = joined[
-    ~(
-        (joined["version"].eq(joined["version_pq"]))
-        | (joined["timestamp"].eq(joined["timestamp_pq"]))
-        | (joined["lat"].eq(joined["lat_pq"]))
-        | (joined["lon"].eq(joined["lon_pq"]))
-    )
-]
-if mismatched.count().sum() > 0:
-    mismatched["version_match"] = mismatched["version"].eq(mismatched["version_pq"])
-    mismatched["timestamp_match"] = mismatched["timestamp"].eq(
-        mismatched["timestamp_pq"]
-    )
-    mismatched["lat_match"] = mismatched["lat"].eq(mismatched["lat_pq"])
-    mismatched["lon_match"] = mismatched["lon"].eq(mismatched["lon_pq"])
-    print(mismatched.count())
-    print(
-        mismatched[
-            [
-                "version",
-                "version_pq",
-                "version_match",
-                "timestamp",
-                "timestamp_pq",
-                "timestamp_match",
-                "lat",
-                "lat_pq",
-                "lat_match",
-                "lon",
-                "lon_pq",
-                "lon_match",
-            ]
-        ].head()
-    )
-    raise AssertionError(f"Mismatched data, count: {mismatched.count().sum()}")
+
+
+def matches(left, right):
+    # Null-safe equality: NaN != NaN in pandas, but a value missing from
+    # both sides (e.g. lat/lon on ways) is a match, not a mismatch. With
+    # nullable dtypes (Int64) eq() yields pd.NA for one-sided nulls; those
+    # are genuine mismatches, so fill False
+    both_na = left.isna() & right.isna()
+    return (left.eq(right) | both_na).fillna(False).astype(bool)
+
+
+def matches_close(left, right, tolerance=1e-9):
+    both_na = left.isna() & right.isna()
+    return ((left - right).abs().lt(tolerance) | both_na).fillna(False).astype(bool)
+
+
+# Every column must match; each is checked independently so a wrong
+# timestamp can't hide behind a correct version (or vice versa)
+scalar_checks = {
+    "version": matches(joined["version"], joined["version_pq"]),
+    "timestamp": matches(joined["timestamp"], joined["timestamp_pq"]),
+    "lat": matches_close(joined["lat"], joined["lat_pq"]),
+    "lon": matches_close(joined["lon"], joined["lon_pq"]),
+}
+# Geofabrik public extracts strip user metadata, so the XML source may
+# legitimately lack these columns — but the parquet schema always carries
+# them, so their absence from the output is a bug, never a skip
+for optional_column in ["uid", "user", "changeset"]:
+    assert (
+        optional_column in pq_df.columns
+    ), f"parquet output missing '{optional_column}' column"
+    if optional_column in xml_df.columns:
+        scalar_checks[optional_column] = matches(
+            joined[optional_column], joined[f"{optional_column}_pq"]
+        )
+    else:
+        print(f"Column '{optional_column}': not in source file, skipping")
+mismatch_count = 0
+for column, column_matches in scalar_checks.items():
+    bad = joined[~column_matches]
+    if len(bad) > 0:
+        mismatch_count += len(bad)
+        print(f"Column '{column}': {len(bad)} mismatched rows")
+        print(bad[[column, f"{column}_pq"]].head())
+if mismatch_count > 0:
+    raise AssertionError(f"Mismatched data, count: {mismatch_count}")
 
 
 def remap_tags(tags):
