@@ -8,7 +8,7 @@ use object_store::local::LocalFileSystem;
 use object_store::path::Path;
 use osmpbf::{DenseNode, Node, RelMemberType, Relation, Way};
 use parquet::arrow::async_writer::AsyncArrowWriter;
-use parquet::basic::{Compression, ZstdLevel};
+use parquet::basic::{Compression, Encoding, ZstdLevel};
 use parquet::file::properties::{EnabledStatistics, WriterProperties};
 use parquet::schema::types::ColumnPath;
 use url::Url;
@@ -146,21 +146,26 @@ impl ElementSink {
     ) -> OsmPbfParquetResult<AsyncArrowWriter<BufWriter>> {
         // Dictionary encoding wastes CPU on high-cardinality columns: the
         // dictionary fills up and encoding falls back to PLAIN anyway.
+        // Sorted or clustered int columns get DELTA_BINARY_PACKED, which
+        // compresses substantially better than PLAIN for them.
         let high_cardinality_columns = [
-            "id",
-            "lat",
-            "lon",
-            "nds.list.item.ref",
-            "members.list.item.ref",
-            "changeset",
-            "timestamp",
+            ("id", Some(Encoding::DELTA_BINARY_PACKED)),
+            ("lat", None),
+            ("lon", None),
+            ("nds.list.item.ref", Some(Encoding::DELTA_BINARY_PACKED)),
+            ("members.list.item.ref", Some(Encoding::DELTA_BINARY_PACKED)),
+            ("changeset", Some(Encoding::DELTA_BINARY_PACKED)),
+            ("timestamp", Some(Encoding::DELTA_BINARY_PACKED)),
         ];
         let mut props_builder = WriterProperties::builder()
             .set_write_batch_size(8192)
             .set_statistics_enabled(EnabledStatistics::Chunk);
-        for column in high_cardinality_columns {
+        for (column, encoding) in high_cardinality_columns {
             let path = ColumnPath::new(column.split('.').map(String::from).collect());
-            props_builder = props_builder.set_column_dictionary_enabled(path, false);
+            props_builder = props_builder.set_column_dictionary_enabled(path.clone(), false);
+            if let Some(encoding) = encoding {
+                props_builder = props_builder.set_column_encoding(path, encoding);
+            }
         }
         if compression == 0 {
             props_builder = props_builder.set_compression(Compression::UNCOMPRESSED);
