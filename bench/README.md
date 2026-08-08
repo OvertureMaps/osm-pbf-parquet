@@ -52,6 +52,33 @@ order-independent row fingerprint instead:
 `SELECT count(*), sum(hash(t)) FROM read_parquet('.../type=way/*.parquet') t`
 per type on both sides.
 
+## S3 output variants (MinIO)
+
+`bench/tools/duckdb-s3.sh` and `bench/tools/sedona-s3.sh` mirror the local
+wrappers but write to S3 instead of a local directory. Both take
+`<input.osm.pbf> <s3://bucket/prefix> <workers>` and assume a local MinIO
+server is already running: endpoint `http://127.0.0.1:9102`, path-style
+addressing, no SSL, access key `bench` / secret `benchsecret123`, region
+`us-east-1`, bucket `bench`. Override via `BENCH_S3_ENDPOINT`,
+`BENCH_S3_ACCESS_KEY`, `BENCH_S3_SECRET_KEY`, `BENCH_S3_REGION`.
+
+- DuckDB uses the `httpfs` extension plus a `CREATE SECRET`; COPY options
+  (zstd-3 parquet, `PARTITION_BY (kind)`) match the local variant. DuckDB
+  errors if the target prefix already holds files — clear it before
+  re-running (`mc rm -r --force ...`).
+- Sedona rewrites `s3://` to `s3a://` and `sedona_job.py` then adds
+  `org.apache.hadoop:hadoop-aws:3.4.1` (matching pyspark 4.0.1's Hadoop
+  3.4.x) and the `fs.s3a.*` MinIO confs; local output paths are unaffected.
+  The first S3 run fetches hadoop-aws + the AWS SDK bundle via ivy. Spark's
+  default rename-based output commit is slow on S3 — fine for smoke tests,
+  but consider the S3A magic committer before treating S3 wall times as
+  benchmark numbers.
+
+These wrappers are for direct invocation only: `run.sh` assumes a local
+output directory (`mkdir`/`rm -rf`, `du`/`find` for output size and file
+count, and block-device mapping for iostat), so `--tools duckdb-s3` would
+hand the wrapper a local path and fail fast.
+
 ## Interpreting results
 
 - With input and output on separate disks, all four tools are CPU-bound on
