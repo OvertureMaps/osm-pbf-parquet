@@ -79,10 +79,43 @@ for tool in ${TOOLS//,/ }; do
 
     TASKSET=()
     [[ -n "$CPUSET" ]] && TASKSET=(taskset -c "$CPUSET")
+    # Run inside a fresh cgroup so CPU is counted even for children that
+    # exit unreaped (py4j kills the Spark JVM before wait(), so rusage
+    # from /usr/bin/time misses all of Sedona's JVM time)
+    CG="/sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/bench-$tool-$$"
+    mkdir "$CG" 2>/dev/null || CG=""
+    # Poll peak anonymous memory from the cgroup (RSS-equivalent, excludes
+    # page cache) — rusage max_rss misses unreaped children like Sedona's JVM
+    MEMPOLL_PID=""
+    if [[ -n "$CG" ]]; then
+        rm -f "$RESULTS/$tool.peak_anon"
+        (
+            m=0
+            while [[ -e "$CG/memory.stat" ]]; do
+                a=$(awk '$1=="anon" {print $2}' "$CG/memory.stat" 2>/dev/null)
+                if [[ -n "${a:-}" && "$a" -gt "$m" ]]; then
+                    m=$a
+                    echo "$m" > "$RESULTS/$tool.peak_anon"
+                fi
+                sleep 2
+            done
+        ) &
+        MEMPOLL_PID=$!
+    fi
     set +e
-    /usr/bin/time -v "${TASKSET[@]}" nice -n "$NICENESS" \
-        "$wrapper" "$INPUT" "$outdir" "$WORKERS" > "$RESULTS/$tool.log" 2>&1
+    (
+        [[ -n "$CG" ]] && echo $BASHPID > "$CG/cgroup.procs"
+        exec /usr/bin/time -v "${TASKSET[@]}" nice -n "$NICENESS" \
+            "$wrapper" "$INPUT" "$outdir" "$WORKERS" > "$RESULTS/$tool.log" 2>&1
+    )
     rc=$?
+    cg_user="" cg_sys=""
+    if [[ -n "$CG" ]]; then
+        cg_user=$(awk '$1=="user_usec" {printf "%.2f", $2/1e6}' "$CG/cpu.stat")
+        cg_sys=$(awk '$1=="system_usec" {printf "%.2f", $2/1e6}' "$CG/cpu.stat")
+        for _ in 1 2 3 4 5; do rmdir "$CG" 2>/dev/null && break; sleep 0.5; done
+    fi
+    [[ -n "$MEMPOLL_PID" ]] && { wait "$MEMPOLL_PID" 2>/dev/null || true; }
     set -e
     kill "$IOSTAT_PID" 2>/dev/null || true
     wait "$IOSTAT_PID" 2>/dev/null || true
@@ -94,10 +127,21 @@ for tool in ${TOOLS//,/ }; do
     fi
 
     wall=$(hms_to_s "$(extract_time_stat "$RESULTS/$tool.log" 'Elapsed (wall clock)')")
-    user=$(extract_time_stat "$RESULTS/$tool.log" 'User time (seconds)')
-    sys=$(extract_time_stat "$RESULTS/$tool.log" 'System time (seconds)')
-    cpu=$(extract_time_stat "$RESULTS/$tool.log" 'Percent of CPU' | tr -d '%')
+    # Prefer cgroup accounting (captures unreaped children); rusage fallback
+    user=${cg_user:-$(extract_time_stat "$RESULTS/$tool.log" 'User time (seconds)')}
+    sys=${cg_sys:-$(extract_time_stat "$RESULTS/$tool.log" 'System time (seconds)')}
+    if [[ -n "$cg_user" ]]; then
+        cpu=$(awk -v u="$cg_user" -v s="$cg_sys" -v w="$wall" 'BEGIN {printf "%.0f", (u+s)*100/w}')
+    else
+        cpu=$(extract_time_stat "$RESULTS/$tool.log" 'Percent of CPU' | tr -d '%')
+    fi
     rss_kb=$(extract_time_stat "$RESULTS/$tool.log" 'Maximum resident set size')
+    # Prefer cgroup peak-anon when it exceeds rusage (unreaped-children case);
+    # take the max since the 2s poller can undersample short spikes
+    if [[ -s "$RESULTS/$tool.peak_anon" ]]; then
+        cg_anon_kb=$(( $(cat "$RESULTS/$tool.peak_anon") / 1024 ))
+        [[ $cg_anon_kb -gt ${rss_kb:-0} ]] && rss_kb=$cg_anon_kb
+    fi
     out_bytes=$(du -sb "$outdir" | cut -f1)
     out_files=$(find "$outdir" -type f | wc -l)
     # iostat: column 3 is rkB/s, column 9 is wkB/s (sysstat 12.x -x layout)
