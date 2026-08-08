@@ -87,24 +87,21 @@ SELECT * FROM osm LIMIT 10;
 ## Benchmarks
 osm-pbf-parquet prioritizes transcode speed over file size, file count or preserving ordering.
 
-On the 2026-02-02 OSM planet PBF (91GB, 11.58B elements) with zstd:3 and 8 worker threads (Core Ultra 7 265K, 64GB, input on NVMe, output on a separate SATA SSD), osm-pbf-parquet transcodes the full planet in **11m18s** (4,580s CPU, 184GB output).
+On the 2026-08-03 OSM planet PBF (94GB, 12.0B elements) with zstd:3 and 8 worker threads (Core Ultra 7 265K, 64GB, input on NVMe, output on a separate SATA SSD), osm-pbf-parquet transcodes the full planet in **11m45s** (4,602s CPU, 193GB output).
 
 Comparison against other PBF→parquet paths on the same machine and planet file,
 each pinned to the same 8 performance cores and writing zstd level-3 parquet,
-with outputs verified equivalent via aggregate checksums:
+with outputs verified equivalent via aggregate checksums. CPU time and peak
+memory are measured from a per-tool cgroup, so they include all child
+processes:
 
-| | Wall time | CPU time | Output size | Files |
-| - | - | - | - | - |
-| **osm-pbf-parquet** | 12m04s | 4,517s | 184GB | 1,083 |
-| [DuckDB](https://duckdb.org) 1.2 spatial `ST_ReadOSM` | 16m28s | 7,330s | 176GB¹ | 3 |
-| [Apache Sedona](https://sedona.apache.org) 1.9 (single-node Spark) | 60m28s | —² | 204GB | 1,366 |
+| | Wall time | CPU time | Peak memory | Output size | Files |
+| - | - | - | - | - | - |
+| **osm-pbf-parquet** | 11m45s | 4,602s | 8.4GiB | 193GB | 1,682 |
+| [DuckDB](https://duckdb.org) 1.5 spatial `ST_ReadOSM` | 15m40s | 7,018s | 6.3GiB | 195GB¹ | 3 |
+| [Apache Sedona](https://sedona.apache.org) 1.9 (single-node Spark, pyspark 4.0.1) | 61m16s | 28,625s | 25.5GiB | 227GB | 1,410 |
 
 ¹ `ST_ReadOSM` emits no metadata columns (changeset/timestamp/uid/user/version/visible), so it writes less data per row.
-² Sedona's JVM CPU time is not captured by the harness.
-
-Writing to S3 instead of local disk (North America extract, all tools writing
-to the same MinIO endpoint): osm-pbf-parquet 2m39s wall / 900s CPU,
-DuckDB httpfs 3m31s / 1,591s, Sedona s3a 13m22s.
 
 
 ## License
