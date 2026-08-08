@@ -146,16 +146,18 @@ impl ElementSink {
     ) -> OsmPbfParquetResult<AsyncArrowWriter<BufWriter>> {
         // Dictionary encoding wastes CPU on high-cardinality columns: the
         // dictionary fills up and encoding falls back to PLAIN anyway.
-        // Sorted or clustered int columns get DELTA_BINARY_PACKED, which
-        // compresses substantially better than PLAIN for them.
+        // Only ids get DELTA_BINARY_PACKED: they are strictly sorted per
+        // file, so deltas stay tiny and pack far smaller than PLAIN. The
+        // other int columns are merely clustered — their delta-packed bits
+        // are high-entropy and compress *worse* under zstd than PLAIN bytes.
         let high_cardinality_columns = [
             ("id", Some(Encoding::DELTA_BINARY_PACKED)),
             ("lat", None),
             ("lon", None),
-            ("nds.list.item.ref", Some(Encoding::DELTA_BINARY_PACKED)),
-            ("members.list.item.ref", Some(Encoding::DELTA_BINARY_PACKED)),
-            ("changeset", Some(Encoding::DELTA_BINARY_PACKED)),
-            ("timestamp", Some(Encoding::DELTA_BINARY_PACKED)),
+            ("nds.list.item.ref", None),
+            ("members.list.item.ref", None),
+            ("changeset", None),
+            ("timestamp", None),
         ];
         let mut props_builder = WriterProperties::builder()
             .set_write_batch_size(8192)
