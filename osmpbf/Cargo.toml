@@ -13,7 +13,7 @@ edition = "2021"
 
 [features]
 async = ["async-stream", "object_store", "tokio", "tokio/io-util", "tokio-stream"]
-default = ["zlib-ng"]
+default = ["rust-zlib"]
 rust-zlib = ["flate2/rust_backend"]
 zlib = ["flate2/zlib"]
 zlib-ng = ["flate2/zlib-ng"]

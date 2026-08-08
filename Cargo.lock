@@ -1651,7 +1651,6 @@ dependencies = [
  "clap 4.6.5",
  "criterion 0.8.2",
  "env_logger",
- "flate2",
  "futures",
  "futures-util",
  "log",
