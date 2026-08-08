@@ -25,6 +25,10 @@ pub struct ElementSink {
     // Arrow wrappers
     osm_builder: Box<OSMArrowBuilder>,
     writer: Option<AsyncArrowWriter<BufWriter>>, // Wrapped so we can replace this on the fly
+    // With lazy writer creation, writer == None can't distinguish
+    // "not opened yet" from "finished"; track closure explicitly so
+    // use-after-finish still fails loudly
+    closed: bool,
 
     // State tracking for batching
     estimated_record_batch_bytes: usize,
@@ -46,6 +50,7 @@ impl ElementSink {
             // Created lazily on first batch write so sinks that never
             // receive data don't produce empty parquet files
             writer: None,
+            closed: false,
 
             estimated_record_batch_bytes: 0usize,
             estimated_file_bytes: 0usize,
@@ -56,7 +61,11 @@ impl ElementSink {
     }
 
     pub async fn finish(&mut self) -> OsmPbfParquetResult<()> {
+        if self.closed {
+            return Err(OsmPbfParquetError::WriterClosed);
+        }
         self.finish_batch().await?;
+        self.closed = true;
         if let Some(writer) = self.writer.take() {
             writer.close().await?;
         }
@@ -80,6 +89,9 @@ impl ElementSink {
         if self.estimated_record_batch_bytes == 0 {
             // Nothing to write
             return Ok(());
+        }
+        if self.closed {
+            return Err(OsmPbfParquetError::WriterClosed);
         }
         let batch = self.osm_builder.finish()?;
         let writer = match self.writer.as_mut() {
