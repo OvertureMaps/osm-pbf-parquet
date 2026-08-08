@@ -4,7 +4,7 @@
 # Usage:
 #   bench/run.sh --input /path/to/x.osm.pbf --output /scratch/bench-out \
 #       [--tools osm-pbf-parquet,duckdb,osm-parquetizer,osm2orc] \
-#       [--workers 8] [--nice 10] [--label mylabel] [--validate]
+#       [--workers 8] [--nice 10] [--cpuset 0-7] [--label mylabel] [--validate]
 #
 # Tool locations are read from bench/config.env (see config.env.example).
 # Results land in bench/results/<label>/: per-tool time+iostat logs and
@@ -34,8 +34,17 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$INPUT" && -n "$OUTPUT" ]] || { echo "--input and --output are required" >&2; exit 2; }
 [[ -f "$INPUT" ]] || { echo "input not found: $INPUT" >&2; exit 2; }
+# Wrappers resolve paths from other directories (e.g. symlink targets), so
+# a relative --input must be absolutized here
+INPUT="$(realpath "$INPUT")"
 
 [[ -f "$BENCH_DIR/config.env" ]] && source "$BENCH_DIR/config.env"
+
+# Build outside the timed window: with OSM_PBF_PARQUET_BIN unset the wrapper
+# builds from this repo, and a cold cargo build would be charged to the run
+if [[ ",$TOOLS," == *",osm-pbf-parquet,"* && -z "${OSM_PBF_PARQUET_BIN:-}" ]]; then
+    cargo build --release --quiet -p osm-pbf-parquet --manifest-path "$BENCH_DIR/../Cargo.toml"
+fi
 
 RESULTS="$BENCH_DIR/results/$LABEL"
 mkdir -p "$RESULTS" "$OUTPUT"
@@ -74,7 +83,8 @@ for tool in ${TOOLS//,/ }; do
     rm -rf "$outdir"; mkdir -p "$outdir"
 
     echo "=== $tool (workers=$WORKERS nice=$NICENESS) ==="
-    iostat -x 5 -d "$IN_DEV" "$OUT_DEV" > "$RESULTS/$tool.iostat" 2>&1 &
+    # -y skips the since-boot first report, which would bias the averages
+    iostat -y -x 5 -d "$IN_DEV" "$OUT_DEV" > "$RESULTS/$tool.iostat" 2>&1 &
     IOSTAT_PID=$!
 
     TASKSET=()
@@ -87,8 +97,8 @@ for tool in ${TOOLS//,/ }; do
     # Poll peak anonymous memory from the cgroup (RSS-equivalent, excludes
     # page cache) — rusage max_rss misses unreaped children like Sedona's JVM
     MEMPOLL_PID=""
+    rm -f "$RESULTS/$tool.peak_anon" "$RESULTS/$tool.cgroup_failed"
     if [[ -n "$CG" ]]; then
-        rm -f "$RESULTS/$tool.peak_anon"
         (
             m=0
             while [[ -e "$CG/memory.stat" ]]; do
@@ -104,18 +114,35 @@ for tool in ${TOOLS//,/ }; do
     fi
     set +e
     (
-        [[ -n "$CG" ]] && echo $BASHPID > "$CG/cgroup.procs"
+        # Migration can fail even when mkdir succeeded: the kernel also needs
+        # write access to the source/destination common ancestor's
+        # cgroup.procs, which an SSH session scope doesn't have. Record the
+        # failure so the empty cgroup's stats aren't trusted below.
+        if [[ -n "$CG" ]] && ! echo $BASHPID > "$CG/cgroup.procs" 2>/dev/null; then
+            touch "$RESULTS/$tool.cgroup_failed"
+        fi
         exec /usr/bin/time -v "${TASKSET[@]}" nice -n "$NICENESS" \
             "$wrapper" "$INPUT" "$outdir" "$WORKERS" > "$RESULTS/$tool.log" 2>&1
     )
     rc=$?
     cg_user="" cg_sys=""
     if [[ -n "$CG" ]]; then
-        cg_user=$(awk '$1=="user_usec" {printf "%.2f", $2/1e6}' "$CG/cpu.stat")
-        cg_sys=$(awk '$1=="system_usec" {printf "%.2f", $2/1e6}' "$CG/cpu.stat")
+        if [[ -e "$RESULTS/$tool.cgroup_failed" ]]; then
+            echo "WARN: cgroup migration failed for $tool; CPU and memory fall back to rusage" >&2
+        else
+            cg_user=$(awk '$1=="user_usec" {printf "%.2f", $2/1e6}' "$CG/cpu.stat")
+            cg_sys=$(awk '$1=="system_usec" {printf "%.2f", $2/1e6}' "$CG/cpu.stat")
+        fi
         for _ in 1 2 3 4 5; do rmdir "$CG" 2>/dev/null && break; sleep 0.5; done
+        [[ -d "$CG" ]] && echo "WARN: cgroup $CG not removed (processes still inside?)" >&2
     fi
-    [[ -n "$MEMPOLL_PID" ]] && { wait "$MEMPOLL_PID" 2>/dev/null || true; }
+    # Kill the poller rather than waiting out its loop: if the cgroup could
+    # not be removed the loop never ends and a bare wait would hang the run.
+    # The peak file is written incrementally, so killing loses nothing.
+    if [[ -n "$MEMPOLL_PID" ]]; then
+        kill "$MEMPOLL_PID" 2>/dev/null || true
+        wait "$MEMPOLL_PID" 2>/dev/null || true
+    fi
     set -e
     kill "$IOSTAT_PID" 2>/dev/null || true
     wait "$IOSTAT_PID" 2>/dev/null || true

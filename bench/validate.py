@@ -238,7 +238,10 @@ def main():
                     row.append("N/A")
                 elif tool == ref:
                     row.append(str(v))
-                elif ref_v is not None and v == ref_v:
+                elif ref_v is None:
+                    # reference lacks this metric; report, don't fail
+                    row.append(f"no-ref({v})")
+                elif v == ref_v:
                     row.append("match")
                 else:
                     row.append(f"MISMATCH({v})")

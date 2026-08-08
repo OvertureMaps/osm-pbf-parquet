@@ -1,7 +1,8 @@
 # OSM transcode benchmark suite
 
 Reproducible comparison of OSM PBF -> columnar transcode tools:
-osm-pbf-parquet (this repo), DuckDB `ST_ReadOSM`, osm-parquetizer, osm2orc.
+osm-pbf-parquet (this repo), DuckDB `ST_ReadOSM`, Apache Sedona
+(single-node Spark, via `uv`), osm-parquetizer, osm2orc.
 
 ## Setup
 
@@ -30,6 +31,8 @@ bench/run.sh \
   DuckDB). The Java tools use their own internal threading.
 - `--nice` niceness for every tool run (default 10), so benchmarks coexist
   with other work on the machine.
+- `--cpuset` pins every tool to the given cores (taskset syntax, e.g.
+  `0-7`); the JVM tools also get a matching `ActiveProcessorCount`.
 - Results land in `bench/results/<label>/`: per-tool `time -v` logs,
   iostat samples for the input and output devices, `summary.tsv`
   (wall / user / sys / CPU% / max RSS / output bytes / file count /
@@ -43,7 +46,8 @@ relation member counts/ref sums/role lengths, and metadata sums (uid,
 changeset) against a reference tool (default osm-pbf-parquet). Columns a
 tool cannot produce are reported `N/A`, not failed — notably DuckDB's
 `ST_ReadOSM` omits all element metadata (changeset, timestamp, uid, user,
-version, visible).
+version, visible). The osm2orc adapter reads its single ORC file fully
+into memory, so validate that tool at extract scale only.
 
 It catches missing/duplicated/corrupted rows and values with high
 probability, at a fraction of the cost of a row-by-row join. For a
