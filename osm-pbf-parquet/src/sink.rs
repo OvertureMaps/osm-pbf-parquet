@@ -144,7 +144,7 @@ impl ElementSink {
                 .set_compression(Compression::ZSTD(ZstdLevel::try_new(compression as i32)?));
         }
         if let Some(max_rows) = max_row_group_rows {
-            props_builder = props_builder.set_max_row_group_size(max_rows);
+            props_builder = props_builder.set_max_row_group_row_count(Some(max_rows));
         }
         let props = props_builder.build();
 
