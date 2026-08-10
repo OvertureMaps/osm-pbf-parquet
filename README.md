@@ -87,23 +87,21 @@ SELECT * FROM osm LIMIT 10;
 ## Benchmarks
 osm-pbf-parquet prioritizes transcode speed over file size, file count or preserving ordering.
 
-On the 2026-02-02 OSM planet PBF (91GB, 11.58B elements) with zstd:3 and 8 worker threads (Core Ultra 7 265K, 64GB, input on NVMe, output on a separate SATA SSD), osm-pbf-parquet transcodes the full planet in **11m18s** (4,580s CPU, 184GB output).
+On the 2026-08-03 OSM planet PBF (94GB, 12.0B elements) with zstd:3 and 8 worker threads (Core Ultra 7 265K, 64GB, input on NVMe, output on a separate SATA SSD), osm-pbf-parquet transcodes the full planet in **11m45s** (4,602s CPU, 193GB output).
 
-Comparison against similar tools on the 2024-06-24 OSM planet PBF with target file size of 500MB:
-| | Time (wall) | Output size | File count |
-| - | - | - | - |
-| **osm-pbf-parquet** (zstd:3) | 30 minutes | 182GB | ~600 |
-| **osm-pbf-parquet** (zstd:9) | 60 minutes | 165GB | ~600 |
-| [osm-parquetizer](https://github.com/adrianulbona/osm-parquetizer) | 196 minutes | 285GB | 3 |
-| [osm2orc](https://github.com/mojodna/osm2orc) | 385 minutes | 110GB | 1 |
+Comparison against other PBF→parquet paths on the same machine and planet file,
+each pinned to the same 8 performance cores and writing zstd level-3 parquet,
+with outputs verified equivalent via aggregate checksums. CPU time and peak
+memory are measured from a per-tool cgroup, so they include all child
+processes:
 
-Test system:
-```
-i5-9400 (6 CPU, 32GB memory)
-Ubuntu 24.04
-OpenJDK 17
-Rust 1.79.0
-```
+| | Wall time | CPU time | Peak memory | Output size | Files |
+| - | - | - | - | - | - |
+| **osm-pbf-parquet** | 11m45s | 4,602s | 8.4GiB | 193GB | 1,682 |
+| [DuckDB](https://duckdb.org) 1.5 spatial `ST_ReadOSM` | 15m40s | 7,018s | 6.3GiB | 195GB¹ | 3 |
+| [Apache Sedona](https://sedona.apache.org) 1.9 (single-node Spark, pyspark 4.0.1) | 61m16s | 28,625s | 25.5GiB | 227GB | 1,410 |
+
+¹ `ST_ReadOSM` emits no metadata columns (changeset/timestamp/uid/user/version/visible), so it writes less data per row.
 
 
 ## License
