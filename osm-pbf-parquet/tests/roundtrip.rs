@@ -446,3 +446,34 @@ fn uncompressed_output_is_readable() {
     let (_, batches) = read_batches(&out, "node");
     assert_eq!(extract_rows(&batches).len(), 5);
 }
+
+#[test]
+fn no_output_files_for_types_without_data() {
+    // golden-nodes.osm.pbf contains only nodes; sinks for ways and
+    // relations receive no data and must not emit empty parquet files.
+    let out = convert("golden-nodes.osm.pbf", "golden-nodes-only", &[]);
+
+    let (_, batches) = read_batches(&out, "node");
+    assert_eq!(extract_rows(&batches).len(), 5);
+
+    for osm_type in ["way", "relation"] {
+        let type_dir = out.join(format!("type={osm_type}"));
+        let files: Vec<String> = match std::fs::read_dir(&type_dir) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(err) => panic!("failed to read {type_dir:?}: {err}"),
+            Ok(entries) => entries
+                .map(|entry| {
+                    entry
+                        .expect("failed to read dir entry")
+                        .file_name()
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect(),
+        };
+        assert!(
+            files.is_empty(),
+            "expected no {osm_type} output files, found {files:?}"
+        );
+    }
+}

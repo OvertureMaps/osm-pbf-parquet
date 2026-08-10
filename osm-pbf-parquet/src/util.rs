@@ -50,7 +50,7 @@ pub struct Args {
     pub input_buffer_size_mb: Option<usize>,
 
     /// Override target record batch size, balance this with available memory
-    /// default is total memory (MB) / CPU count / 8
+    /// default is total memory (MB) / CPU count / 8, capped at 128
     #[arg(long)]
     pub record_batch_target_mb: Option<usize>,
 
@@ -183,8 +183,12 @@ fn default_record_batch_size_mb() -> usize {
     );
     let total_memory_mb = system.total_memory() as usize / BYTES_IN_MB;
     let cpu_count = system.cpus().len();
-    // Estimate per thread available memory, leaving overhead for copies and system processes
-    (total_memory_mb / cpu_count) / 8usize
+    // Estimate per thread available memory, leaving overhead for copies and
+    // system processes. Capped: row group size is governed by the parquet
+    // writer independently of batch size, and ~1.5x worker_threads sinks can
+    // be filling batches concurrently, so uncapped targets on large machines
+    // only add builder memory (tens of GB peak RSS) without changing output.
+    ((total_memory_mb / cpu_count) / 8usize).clamp(16, 128)
 }
 
 #[cfg(test)]

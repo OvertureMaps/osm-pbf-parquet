@@ -25,14 +25,16 @@ for feature_type in ["node", "way", "relation"]:
         new_entries["type"] = feature_type
         for key, value in row.items():
             new_value = value
-            # Everything is read in as strings, try to parse
-            try:
-                new_value = int(value)
-            except Exception:
+            # Everything is read in as strings, try to parse — except user,
+            # which is a string column even when the username is all digits
+            if key != "@user":
                 try:
-                    new_value = float(value)
+                    new_value = int(value)
                 except Exception:
-                    pass
+                    try:
+                        new_value = float(value)
+                    except Exception:
+                        pass
             if "timestamp" in key:
                 new_value = round(datetime.fromisoformat(value).timestamp() * 1e3)
 
@@ -175,6 +177,9 @@ def remap_nodes(nodes):
 
 
 def compare_nodes(xml_nodes, pq_nodes):
+    # zip alone would silently pass truncated/empty parquet lists
+    if len(xml_nodes) != len(pq_nodes):
+        return False
     for xml, pq in zip(xml_nodes, pq_nodes):
         if str(xml) != str(pq):
             return False
@@ -216,6 +221,9 @@ def remap_members(members):
 
 
 def compare_members(xml_members, pq_members):
+    # zip alone would silently pass truncated/empty parquet lists
+    if len(xml_members) != len(pq_members):
+        return False
     for xml, pq in zip(xml_members, pq_members):
         if xml != pq:
             return False

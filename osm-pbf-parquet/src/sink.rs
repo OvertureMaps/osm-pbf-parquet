@@ -8,8 +8,9 @@ use object_store::local::LocalFileSystem;
 use object_store::path::Path;
 use osmpbf::{DenseNode, Node, RelMemberType, Relation, Way};
 use parquet::arrow::async_writer::AsyncArrowWriter;
-use parquet::basic::{Compression, ZstdLevel};
-use parquet::file::properties::WriterProperties;
+use parquet::basic::{Compression, Encoding, ZstdLevel};
+use parquet::file::properties::{EnabledStatistics, WriterProperties};
+use parquet::schema::types::ColumnPath;
 use url::Url;
 
 use crate::error::{OsmPbfParquetError, OsmPbfParquetResult};
@@ -24,6 +25,10 @@ pub struct ElementSink {
     // Arrow wrappers
     osm_builder: Box<OSMArrowBuilder>,
     writer: Option<AsyncArrowWriter<BufWriter>>, // Wrapped so we can replace this on the fly
+    // With lazy writer creation, writer == None can't distinguish
+    // "not opened yet" from "finished"; track closure explicitly so
+    // use-after-finish still fails loudly
+    closed: bool,
 
     // State tracking for batching
     estimated_record_batch_bytes: usize,
@@ -37,16 +42,15 @@ impl ElementSink {
     pub fn new(filenum: Arc<Mutex<u64>>, osm_type: OSMType) -> OsmPbfParquetResult<Self> {
         let args = ARGS.get().expect("ARGS not initialized");
 
-        let full_path = Self::create_full_path(&args.output, &osm_type, &filenum, args.compression);
-        let buf_writer = Self::create_buf_writer(&full_path)?;
-        let writer = Self::create_writer(buf_writer, args.compression, args.max_row_group_count)?;
-
         Ok(ElementSink {
             osm_type,
             filenum,
 
             osm_builder: Box::new(OSMArrowBuilder::new()),
-            writer: Some(writer),
+            // Created lazily on first batch write so sinks that never
+            // receive data don't produce empty parquet files
+            writer: None,
+            closed: false,
 
             estimated_record_batch_bytes: 0usize,
             estimated_file_bytes: 0usize,
@@ -57,13 +61,28 @@ impl ElementSink {
     }
 
     pub async fn finish(&mut self) -> OsmPbfParquetResult<()> {
+        if self.closed {
+            return Err(OsmPbfParquetError::WriterClosed);
+        }
         self.finish_batch().await?;
-        self.writer
-            .take()
-            .ok_or(OsmPbfParquetError::WriterClosed)?
-            .close()
-            .await?;
+        self.closed = true;
+        if let Some(writer) = self.writer.take() {
+            writer.close().await?;
+        }
         Ok(())
+    }
+
+    fn new_writer(&mut self) -> OsmPbfParquetResult<&mut AsyncArrowWriter<BufWriter>> {
+        let args = ARGS.get().expect("ARGS not initialized");
+        let full_path = Self::create_full_path(
+            &args.output,
+            &self.osm_type,
+            &self.filenum,
+            args.compression,
+        );
+        let buf_writer = Self::create_buf_writer(&full_path)?;
+        let writer = Self::create_writer(buf_writer, args.compression, args.max_row_group_count)?;
+        Ok(self.writer.insert(writer))
     }
 
     async fn finish_batch(&mut self) -> OsmPbfParquetResult<()> {
@@ -71,14 +90,18 @@ impl ElementSink {
             // Nothing to write
             return Ok(());
         }
+        if self.closed {
+            return Err(OsmPbfParquetError::WriterClosed);
+        }
         let batch = self.osm_builder.finish()?;
-        self.writer
-            .as_mut()
-            .ok_or(OsmPbfParquetError::WriterClosed)?
-            .write(&batch)
-            .await?;
+        let writer = match self.writer.as_mut() {
+            Some(writer) => writer,
+            None => self.new_writer()?,
+        };
+        writer.write(&batch).await?;
 
-        // Reset writer to new path if needed
+        // Close out file if it reached its target size; the next batch
+        // lazily opens a new one
         self.estimated_file_bytes += self.estimated_record_batch_bytes;
         if self.estimated_file_bytes >= self.target_file_bytes {
             self.writer
@@ -86,21 +109,6 @@ impl ElementSink {
                 .ok_or(OsmPbfParquetError::WriterClosed)?
                 .close()
                 .await?;
-
-            // Create new writer and output
-            let args = ARGS.get().expect("ARGS not initialized");
-            let full_path = Self::create_full_path(
-                &args.output,
-                &self.osm_type,
-                &self.filenum,
-                args.compression,
-            );
-            let buf_writer = Self::create_buf_writer(&full_path)?;
-            self.writer = Some(Self::create_writer(
-                buf_writer,
-                args.compression,
-                args.max_row_group_count,
-            )?);
             self.estimated_file_bytes = 0;
         }
 
@@ -136,7 +144,31 @@ impl ElementSink {
         compression: u8,
         max_row_group_rows: Option<usize>,
     ) -> OsmPbfParquetResult<AsyncArrowWriter<BufWriter>> {
-        let mut props_builder = WriterProperties::builder();
+        // Dictionary encoding wastes CPU on high-cardinality columns: the
+        // dictionary fills up and encoding falls back to PLAIN anyway.
+        // Only ids get DELTA_BINARY_PACKED: they are strictly sorted per
+        // file, so deltas stay tiny and pack far smaller than PLAIN. The
+        // other int columns are merely clustered — their delta-packed bits
+        // are high-entropy and compress *worse* under zstd than PLAIN bytes.
+        let high_cardinality_columns = [
+            ("id", Some(Encoding::DELTA_BINARY_PACKED)),
+            ("lat", None),
+            ("lon", None),
+            ("nds.list.item.ref", None),
+            ("members.list.item.ref", None),
+            ("changeset", None),
+            ("timestamp", None),
+        ];
+        let mut props_builder = WriterProperties::builder()
+            .set_write_batch_size(8192)
+            .set_statistics_enabled(EnabledStatistics::Chunk);
+        for (column, encoding) in high_cardinality_columns {
+            let path = ColumnPath::new(column.split('.').map(String::from).collect());
+            props_builder = props_builder.set_column_dictionary_enabled(path.clone(), false);
+            if let Some(encoding) = encoding {
+                props_builder = props_builder.set_column_encoding(path, encoding);
+            }
+        }
         if compression == 0 {
             props_builder = props_builder.set_compression(Compression::UNCOMPRESSED);
         } else if compression > 0 && compression <= 22 {
