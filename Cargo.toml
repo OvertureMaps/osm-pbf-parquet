@@ -9,4 +9,4 @@ lto = "thin"
 codegen-units = 1
 
 [workspace.dependencies]
-osmpbf = { path = "osmpbf", default-features = false, features = ["zlib-ng", "async"] }
+osmpbf = { path = "osmpbf", default-features = false, features = ["rust-zlib", "async"] }

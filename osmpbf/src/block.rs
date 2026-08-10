@@ -428,8 +428,16 @@ pub(crate) fn str_from_stringtable(
     index: usize,
 ) -> Result<&str> {
     if let Some(vec) = block.stringtable.s.get(index) {
-        std::str::from_utf8(vec)
-            .map_err(|e| new_error(ErrorKind::StringtableUtf8 { err: e, index }))
+        // SIMD-accelerated validation; on the (exceptional) error path,
+        // re-validate with std to produce the std Utf8Error the API exposes.
+        // If the validators ever disagree, trust std rather than panic.
+        match simdutf8::basic::from_utf8(vec) {
+            Ok(s) => Ok(s),
+            Err(_) => match std::str::from_utf8(vec) {
+                Ok(s) => Ok(s),
+                Err(err) => Err(new_error(ErrorKind::StringtableUtf8 { err, index })),
+            },
+        }
     } else {
         Err(new_error(ErrorKind::StringtableIndexOutOfBounds { index }))
     }
