@@ -39,6 +39,9 @@ parquet/
     way_0000.zstd.parquet
     ...
 ```
+Files are rolled once the parquet writer has emitted `--file-target-mb`
+(default 500MB), so output files land close to that size.
+
 [Reference Arrow/SQL schema](https://github.com/OvertureMaps/osm-pbf-parquet/blob/main/src/osm_arrow.rs)
 
 ### Querying
@@ -85,23 +88,24 @@ SELECT * FROM osm LIMIT 10;
 
 
 ## Benchmarks
-osm-pbf-parquet prioritizes transcode speed over file size, file count or preserving ordering.
+osm-pbf-parquet prioritizes transcode speed over preserving element ordering.
 
-On the 2026-08-03 OSM planet PBF (94GB, 12.0B elements) with zstd:3 and 8 worker threads (Core Ultra 7 265K, 64GB, input on NVMe, output on a separate SATA SSD), osm-pbf-parquet transcodes the full planet in **11m45s** (4,602s CPU, 193GB output).
+Measured on the 2026-08-03 OSM planet PBF (94GB, 12.0B elements), transcoded by
+each tool on the same machine (Core Ultra 7 265K, 64GB, input on NVMe, output
+on a separate SATA SSD), pinned to the same 8 performance cores, with 8 worker
+threads and zstd level-3 parquet output, and outputs verified equivalent via
+aggregate checksums. CPU time is user + system time; peak memory includes child
+processes, so Sedona's Spark JVM is counted:
 
-Comparison against other PBF→parquet paths on the same machine and planet file,
-each pinned to the same 8 performance cores and writing zstd level-3 parquet,
-with outputs verified equivalent via aggregate checksums. CPU time and peak
-memory are measured from a per-tool cgroup, so they include all child
-processes:
-
-| | Wall time | CPU time | Peak memory | Output size | Files |
+| | Wall time | CPU time | Peak memory | Output size | Files² |
 | - | - | - | - | - | - |
-| **osm-pbf-parquet** | 11m45s | 4,602s | 8.4GiB | 193GB | 1,682 |
-| [DuckDB](https://duckdb.org) 1.5 spatial `ST_ReadOSM` | 15m40s | 7,018s | 6.3GiB | 195GB¹ | 3 |
-| [Apache Sedona](https://sedona.apache.org) 1.9 (single-node Spark, pyspark 4.0.1) | 61m16s | 28,625s | 25.5GiB | 227GB | 1,410 |
+| **osm-pbf-parquet** | 11m07s | 4,931s | 7.8GiB | 193GB | 377 |
+| [DuckDB](https://duckdb.org) 1.5 spatial `ST_ReadOSM` | 15m40s | 7,298s | 6.3GiB | 195GB¹ | 3 |
+| [Apache Sedona](https://sedona.apache.org) 1.9 (single-node Spark, pyspark 4.0.1) | 61m16s | 28,884s | 25.5GiB | 227GB | 1,410 |
 
 ¹ `ST_ReadOSM` emits no metadata columns (changeset/timestamp/uid/user/version/visible), so it writes less data per row.
+
+² Only osm-pbf-parquet targets a file size; the others write one file per output partition. See [bench/README.md](bench/README.md).
 
 
 ## License

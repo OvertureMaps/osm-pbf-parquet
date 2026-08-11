@@ -32,7 +32,6 @@ pub struct ElementSink {
 
     // State tracking for batching
     estimated_record_batch_bytes: usize,
-    estimated_file_bytes: usize,
     target_record_batch_bytes: usize,
     target_file_bytes: usize,
     pub last_write_cycle: Instant,
@@ -53,7 +52,6 @@ impl ElementSink {
             closed: false,
 
             estimated_record_batch_bytes: 0usize,
-            estimated_file_bytes: 0usize,
             target_record_batch_bytes: args.get_record_batch_target_bytes(),
             target_file_bytes: args.get_file_target_bytes(),
             last_write_cycle: Instant::now(),
@@ -101,15 +99,19 @@ impl ElementSink {
         writer.write(&batch).await?;
 
         // Close out file if it reached its target size; the next batch
-        // lazily opens a new one
-        self.estimated_file_bytes += self.estimated_record_batch_bytes;
-        if self.estimated_file_bytes >= self.target_file_bytes {
+        // lazily opens a new one. Size comes from the writer itself:
+        // bytes_written() counts what has been flushed to the sink, and
+        // in_progress_size() the encoded size of the row group still
+        // buffered, so the two together track the eventual file size.
+        // The per-element estimate is uncompressed and overshoots by
+        // several x, which capped files well under the target.
+        let file_bytes = writer.bytes_written() + writer.in_progress_size();
+        if file_bytes >= self.target_file_bytes {
             self.writer
                 .take()
                 .ok_or(OsmPbfParquetError::WriterClosed)?
                 .close()
                 .await?;
-            self.estimated_file_bytes = 0;
         }
 
         self.estimated_record_batch_bytes = 0;

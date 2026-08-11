@@ -24,6 +24,8 @@ url = "2.5.8"
 
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["async_futures", "async_tokio"] }
+osmpbf = { workspace = true, features = ["proto"] }
+protobuf = "3.1"
 
 [lib]
 name = "osm_pbf_parquet"

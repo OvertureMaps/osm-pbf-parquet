@@ -1657,6 +1657,7 @@ dependencies = [
  "object_store",
  "osmpbf",
  "parquet",
+ "protobuf",
  "sysinfo",
  "thiserror 2.0.19",
  "tokio",

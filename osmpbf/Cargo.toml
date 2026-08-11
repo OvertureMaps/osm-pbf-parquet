@@ -17,6 +17,8 @@ default = ["rust-zlib"]
 rust-zlib = ["flate2/rust_backend"]
 zlib = ["flate2/zlib"]
 zlib-ng = ["flate2/zlib-ng"]
+# Re-export generated protobuf types for building synthetic PBF in tests
+proto = []
 
 [dependencies]
 async-stream = { version = "0.3.6", optional = true }
