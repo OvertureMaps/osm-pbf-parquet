@@ -5,8 +5,8 @@ Usage: sedona_job.py <input.osm.pbf> <outdir> <workers>
 hadoop-aws package and points fs.s3a at the bench MinIO endpoint
 (defaults below, env-overridable); local output is unchanged.
 Env: SPARK_DRIVER_MEMORY (default 24g), SEDONA_PACKAGE (maven coordinate),
-HADOOP_AWS_PACKAGE, BENCH_S3_ENDPOINT, BENCH_S3_ACCESS_KEY,
-BENCH_S3_SECRET_KEY, BENCH_S3_REGION
+SEDONA_MAX_PARTITION_BYTES (default 128MB), HADOOP_AWS_PACKAGE,
+BENCH_S3_ENDPOINT, BENCH_S3_ACCESS_KEY, BENCH_S3_SECRET_KEY, BENCH_S3_REGION
 """
 import os
 import sys
@@ -49,6 +49,12 @@ builder = (
     .master(f"local[{workers}]")
     .config("spark.driver.memory", driver_mem)
     .config("spark.jars.packages", packages)
+    # Read+write is one stage, so this sets split count, task parallelism and
+    # output file count together. Default matches Spark's own 128MB.
+    .config(
+        "spark.sql.files.maxPartitionBytes",
+        os.environ.get("SEDONA_MAX_PARTITION_BYTES", "134217728"),
+    )
     .config("spark.sql.parquet.compression.codec", "zstd")
     .config("spark.io.compression.zstd.level", "3")
     .config("parquet.compression.codec.zstd.level", "3")

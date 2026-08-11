@@ -36,7 +36,9 @@ bench/run.sh \
 - Results land in `bench/results/<label>/`: per-tool `time -v` logs,
   iostat samples for the input and output devices, `summary.tsv`
   (wall / user / sys / CPU% / max RSS / output bytes / file count /
-  avg read and write MB/s), and `validation.txt` with `--validate`.
+  avg read and write MB/s), `versions.txt` recording the binary each tool
+  actually resolved to and its version, and `validation.txt` with
+  `--validate`.
 
 ## Accuracy comparison (`--validate` or `bench/validate.py`)
 
@@ -90,3 +92,34 @@ hand the wrapper a local path and fail fast.
   metric, wall time is what you experience at a given worker count.
 - Output sizes are not directly comparable across tools: schemas differ
   (see above), as do container defaults (row-group size, compression).
+- File counts are not comparable: only osm-pbf-parquet targets a file size
+  (`--file-target-mb`, default 500MB). DuckDB writes one file per
+  `PARTITION_BY` value, and refuses `FILE_SIZE_BYTES` or `PER_THREAD_OUTPUT`
+  alongside it.
+- Sedona writes one file per Spark partition per key. Read and write are a
+  single stage, so `spark.sql.files.maxPartitionBytes` (128MB default,
+  overridable via `SEDONA_MAX_PARTITION_BYTES`) sets split count, task
+  parallelism and file count together. Raising it to 512MB on the planet gave
+  358 files instead of 1,410, at 5.8% more wall time and 3.4% more CPU: the job
+  already saturates ~96% of 8 cores, so larger tasks only lose on load balance
+  and GC.
+- `summary.tsv` reports `user_s`/`sys_s` separately; the CPU figure quoted in
+  the top-level README is their sum. Peak memory is rusage max RSS,
+  replaced by the cgroup's peak anonymous memory when that is larger — which
+  in practice happens only for Sedona, whose JVM py4j kills before `wait()`.
+- Peak RSS is the noisiest column: repeat runs of an identical binary have
+  differed by ~9%, against ~0.1% for wall time. Do not read small memory
+  deltas as signal.
+
+### cgroup accounting
+
+Per-tool CPU and memory come from a cgroup so unreaped children are counted.
+Creating one is not enough: the kernel also wants write access to the
+`cgroup.procs` of the common ancestor of the source and destination cgroups,
+and a login or SSH session sits in `user-<uid>.slice/session-N.scope` under a
+root-owned parent. `run.sh` therefore re-execs itself in a scope under
+`user@<uid>.service`, which systemd delegates to the invoking user.
+
+Where that is not possible the run still proceeds, logging `WARN: cgroup
+migration failed` and falling back to rusage. A run with working accounting
+leaves `<tool>.peak_anon` and no `<tool>.cgroup_failed` in its results dir.
