@@ -12,6 +12,20 @@
 set -euo pipefail
 
 BENCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Per-tool cgroup accounting needs write access to the cgroup.procs of the
+# common ancestor of the source and destination cgroups, which a login or SSH
+# session scope does not have; re-exec under user@<uid>.service, which systemd
+# delegates to us (see README.md). The probe separates "no usable user manager"
+# — fall through to the rusage fallback — from a benchmark failure.
+if [[ -z "${BENCH_IN_USER_SCOPE:-}" ]] \
+    && ! grep -qF "user@$(id -u).service" /proc/self/cgroup \
+    && command -v systemd-run >/dev/null 2>&1 \
+    && systemd-run --user --scope --quiet --same-dir -- true 2>/dev/null; then
+    export BENCH_IN_USER_SCOPE=1
+    exec systemd-run --user --scope --quiet --same-dir -- "$BENCH_DIR/run.sh" "$@"
+fi
+
 TOOLS="osm-pbf-parquet,duckdb,osm-parquetizer,osm2orc"
 WORKERS=8
 NICENESS=10
@@ -64,6 +78,39 @@ device_for_path() {
 IN_DEV=$(device_for_path "$(dirname "$INPUT")")
 OUT_DEV=$(device_for_path "$OUTPUT")
 echo "input device: $IN_DEV, output device: $OUT_DEV"
+
+# Record what actually produced these numbers. Wrappers resolve their binary
+# from config.env or fall back to PATH, so a summary alone does not say which
+# build was measured. Probed here rather than in the wrappers to keep it out of
+# the timed window.
+java_version() {
+    local java="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+    command -v "$java" >/dev/null 2>&1 || { echo "java not found"; return; }
+    "$java" -version 2>&1 | head -1
+}
+
+tool_version() { # tool -> "<resolved> | <version>"
+    case "$1" in
+        osm-pbf-parquet)
+            local bin="${OSM_PBF_PARQUET_BIN:-$BENCH_DIR/../target/release/osm-pbf-parquet}"
+            echo "$bin | $("$bin" --version 2>&1 | head -1)" ;;
+        duckdb|duckdb-s3)
+            local bin="${DUCKDB_BIN:-duckdb}"
+            echo "$bin | $("$bin" -csv -noheader -c 'select version();' 2>/dev/null || echo unknown)" ;;
+        sedona|sedona-s3)
+            # pinned in the wrapper's uv invocation
+            echo "uv | $(grep -o 'apache-sedona\[spark\]==[0-9.]*' "$BENCH_DIR/tools/sedona.sh" | head -1), \
+$(grep -o 'pyspark==[0-9.]*' "$BENCH_DIR/tools/sedona.sh" | head -1)" ;;
+        osm2orc)     echo "${OSM2ORC_BIN:-unset} | $(java_version)" ;;
+        osm-parquetizer) echo "${PARQUETIZER_JAR:-unset} | $(java_version)" ;;
+        *)           echo "unknown" ;;
+    esac
+}
+
+for tool in ${TOOLS//,/ }; do
+    printf '%s\t%s\n' "$tool" "$(tool_version "$tool")"
+done > "$RESULTS/versions.txt"
+echo "tool versions -> $RESULTS/versions.txt"
 
 SUMMARY="$RESULTS/summary.tsv"
 echo -e "tool\twall_s\tuser_s\tsys_s\tcpu_pct\tmax_rss_mb\tout_bytes\tout_files\tin_dev_r_mbps\tout_dev_w_mbps" > "$SUMMARY"
