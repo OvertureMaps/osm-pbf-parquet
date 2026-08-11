@@ -91,6 +91,11 @@ pub mod indexed;
 pub mod mmap_blob;
 pub mod reader;
 
+/// Generated protobuf types, re-exported under the `proto` feature so tests can
+/// build synthetic PBF input. Not part of the stable API.
+#[cfg(feature = "proto")]
+pub use proto::{fileformat, osmformat};
+
 mod proto {
     include!(concat!(env!("OUT_DIR"), "/mod.rs"));
 }
