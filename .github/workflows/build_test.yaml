@@ -28,7 +28,7 @@ jobs:
 
     - name: Install Rust components
       run: rustup component add clippy rustfmt
-    - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
     - name: Run clippy
       run: cargo clippy --all-targets -p osm-pbf-parquet
     - name: Run cargo fmt
@@ -45,7 +45,7 @@ jobs:
       with:
         persist-credentials: false
 
-    - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
     - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
     - name: Build
       run: cargo build --release -p osm-pbf-parquet
@@ -70,7 +70,7 @@ jobs:
       with:
         persist-credentials: false
 
-    - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
     - name: Build
       run: cargo build --release -p osm-pbf-parquet
     - name: Run unit tests
