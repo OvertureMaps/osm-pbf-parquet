@@ -75,3 +75,35 @@ jobs:
       run: cargo build --release -p osm-pbf-parquet
     - name: Run unit tests
       run: cargo test --workspace
+
+  check-crate-packaging:
+    name: Check crate packaging
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+    # NOTE: rename to osmpbf-async once #43 lands.
+    # TODO: repin to a tagged/main ref once OvertureMaps/workflows's
+    # publish-crate-to-crates-io PR merges; this SHA is a pre-merge branch commit.
+    - name: Check osmpbf packages cleanly
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@fbceb02c025d393391323935ec33352efbdea370
+      with:
+        manifest-path: osmpbf/Cargo.toml
+        dry-run-only: "true"
+
+    # continue-on-error: osm-pbf-parquet's path dependency on osmpbf has no
+    # `version =`, so cargo publish always rejects it (see publish_crates.yml).
+    # Remove continue-on-error once #43 (or a follow-up) adds that version.
+    - name: Check osm-pbf-parquet packages cleanly
+      continue-on-error: true
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@fbceb02c025d393391323935ec33352efbdea370
+      with:
+        manifest-path: osm-pbf-parquet/Cargo.toml
+        dry-run-only: "true"
