@@ -93,7 +93,7 @@ jobs:
     # TODO: repin to a tagged/main ref once OvertureMaps/workflows's
     # publish-crate-to-crates-io PR merges; this SHA is a pre-merge branch commit.
     - name: Check osmpbf packages cleanly
-      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@fbceb02c025d393391323935ec33352efbdea370
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@3bb867cdf125c6c8323347bbe1acfd0c43b8514a
       with:
         manifest-path: osmpbf/Cargo.toml
         dry-run-only: "true"
@@ -103,7 +103,7 @@ jobs:
     # Remove continue-on-error once #43 (or a follow-up) adds that version.
     - name: Check osm-pbf-parquet packages cleanly
       continue-on-error: true
-      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@fbceb02c025d393391323935ec33352efbdea370
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@3bb867cdf125c6c8323347bbe1acfd0c43b8514a
       with:
         manifest-path: osm-pbf-parquet/Cargo.toml
         dry-run-only: "true"
