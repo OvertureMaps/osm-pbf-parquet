@@ -2,7 +2,7 @@
 name = "osm-pbf-parquet"
 version = "0.2.0"
 authors = [
-    "Brad Richardson <placeholder@placeholder.org>",
+    "Brad Richardson <bradrichardson@meta.com>",
     "Francisco Jiménez <jjcfrank@gmail.com>",
 ]
 edition = "2024"
