@@ -1655,7 +1655,7 @@ dependencies = [
  "futures-util",
  "log",
  "object_store",
- "osmpbf",
+ "osmpbf-async",
  "parquet",
  "protobuf",
  "sysinfo",
@@ -1666,8 +1666,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "osmpbf"
-version = "0.3.7"
+name = "osmpbf-async"
+version = "0.1.0"
 dependencies = [
  "assert_approx_eq",
  "async-stream",

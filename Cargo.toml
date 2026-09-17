@@ -1,5 +1,5 @@
 [workspace]
-members = ["osm-pbf-parquet", "osmpbf"]
+members = ["osm-pbf-parquet", "osmpbf-async"]
 resolver = "2"
 
 # Measured ~4% CPU reduction on transcode (cross-crate inlining into the
@@ -9,4 +9,4 @@ lto = "thin"
 codegen-units = 1
 
 [workspace.dependencies]
-osmpbf = { path = "osmpbf", default-features = false, features = ["rust-zlib", "async"] }
+osmpbf = { package = "osmpbf-async", path = "osmpbf-async", version = "0.1.0", default-features = false, features = ["rust-zlib", "async"] }

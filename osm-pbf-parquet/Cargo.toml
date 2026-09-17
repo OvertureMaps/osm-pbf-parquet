@@ -1,7 +1,20 @@
 [package]
 name = "osm-pbf-parquet"
 version = "0.2.0"
+authors = [
+    "Brad Richardson <bradrichardson@meta.com>",
+    "Francisco Jiménez <jjcfrank@gmail.com>",
+]
 edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+description = "Transcode OpenStreetMap PBF files to Parquet with hive-style partitioning by element type."
+homepage = "https://github.com/OvertureMaps/osm-pbf-parquet"
+repository = "https://github.com/OvertureMaps/osm-pbf-parquet"
+readme = "../README.md"
+keywords = ["openstreetmap", "osm", "pbf", "parquet", "arrow"]
+categories = ["command-line-utilities", "encoding", "science::geo"]
+exclude = ["test/"]
 
 [dependencies]
 arrow-array = "59.1.0"
