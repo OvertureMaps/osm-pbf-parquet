@@ -10,10 +10,6 @@ permissions:
 jobs:
   upload-assets:
     name: Upload assets
-    # Skip entirely for an osmpbf-async-scoped release (tag
-    # osmpbf-async-vX.Y.Z, see publish_crates.yml): that release has no new
-    # osm-pbf-parquet version, so there's nothing new to build or attach.
-    if: ${{ !startsWith(github.event.release.tag_name, 'osmpbf-async-') }}
     permissions:
       contents: write # Required for uploading release assets
     strategy:
