@@ -89,18 +89,13 @@ jobs:
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-    # NOTE: rename to osmpbf-async once #43 lands.
-    - name: Check osmpbf packages cleanly
+    - name: Check osmpbf-async packages cleanly
       uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@ddc42be1d93c397f4ed87198424727637ed0d777 # main
       with:
-        manifest-path: osmpbf/Cargo.toml
+        manifest-path: osmpbf-async/Cargo.toml
         dry-run-only: "true"
 
-    # continue-on-error: osm-pbf-parquet's path dependency on osmpbf has no
-    # `version =`, so cargo publish always rejects it (see publish_crates.yml).
-    # Remove continue-on-error once #43 (or a follow-up) adds that version.
     - name: Check osm-pbf-parquet packages cleanly
-      continue-on-error: true
       uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@ddc42be1d93c397f4ed87198424727637ed0d777 # main
       with:
         manifest-path: osm-pbf-parquet/Cargo.toml

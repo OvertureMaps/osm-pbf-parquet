@@ -28,21 +28,20 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      # osmpbf is published first since osm-pbf-parquet depends on it.
-      # NOTE: rename to osmpbf-async once #43 lands.
+      # osmpbf-async is published first since osm-pbf-parquet depends on it.
       #
       # The action doesn't authenticate itself: each caller mints its own
       # token and passes it through CARGO_REGISTRY_TOKEN on the calling step.
-      - name: Authenticate with crates.io (osmpbf)
-        id: auth-osmpbf
+      - name: Authenticate with crates.io (osmpbf-async)
+        id: auth-osmpbf-async
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
 
-      - name: Publish osmpbf
+      - name: Publish osmpbf-async
         uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@ddc42be1d93c397f4ed87198424727637ed0d777 # main
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth-osmpbf.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth-osmpbf-async.outputs.token }}
         with:
-          manifest-path: osmpbf/Cargo.toml
+          manifest-path: osmpbf-async/Cargo.toml
           release-tag: ${{ github.event.release.tag_name }}
 
       # Re-authenticate for the second crate: a token minted above isn't
