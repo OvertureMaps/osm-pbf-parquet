@@ -3,8 +3,6 @@
 [![Build status](https://github.com/OvertureMaps/osm-pbf-parquet/actions/workflows/build_test.yaml/badge.svg)](https://github.com/OvertureMaps/osm-pbf-parquet/actions/workflows/build_test.yaml)
 [![Crates.io](https://img.shields.io/crates/v/osm-pbf-parquet.svg)](https://crates.io/crates/osm-pbf-parquet)
 [![Documentation](https://docs.rs/osm-pbf-parquet/badge.svg)](https://docs.rs/osm-pbf-parquet)
-[![Crates.io](https://img.shields.io/crates/v/osmpbf-async.svg)](https://crates.io/crates/osmpbf-async)
-[![Documentation](https://docs.rs/osmpbf-async/badge.svg)](https://docs.rs/osmpbf-async)
 
 Transcode OSM PBF file to parquet files with hive-style partitioning by type
 
