@@ -65,7 +65,9 @@ jobs:
 
       - name: Check if osm-pbf-parquet is already published
         id: check-osm-pbf-parquet
-        run: bash .github/scripts/check-crate-published.sh osm-pbf-parquet osm-pbf-parquet/Cargo.toml
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: bash .github/scripts/check-crate-published.sh osm-pbf-parquet osm-pbf-parquet/Cargo.toml "$RELEASE_TAG"
 
       # Re-authenticate for the second crate: a token minted above isn't
       # confirmed to be valid for more than one crate.
