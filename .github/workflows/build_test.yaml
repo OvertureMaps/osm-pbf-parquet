@@ -90,7 +90,7 @@ jobs:
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
     - name: Check osmpbf-async packages cleanly
-      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # zizmor: ignore[stale-action-refs] -- no tagged release yet; pinned to OvertureMaps/workflows main
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@main # zizmor: ignore[unpinned-uses] -- same org, no tagged release yet; intentionally tracks main
       with:
         manifest-path: osmpbf-async/Cargo.toml
         dry-run-only: "true"
@@ -102,7 +102,7 @@ jobs:
       # dry-run can't resolve it until the first real release publishes
       # osmpbf-async. Remove continue-on-error once that's happened.
       continue-on-error: true
-      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # zizmor: ignore[stale-action-refs] -- no tagged release yet; pinned to OvertureMaps/workflows main
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@main # zizmor: ignore[unpinned-uses] -- same org, no tagged release yet; intentionally tracks main
       with:
         manifest-path: osm-pbf-parquet/Cargo.toml
         dry-run-only: "true"
