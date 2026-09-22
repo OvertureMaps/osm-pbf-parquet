@@ -1,12 +1,13 @@
-osmpbf
-======
+osmpbf-async
+============
 A Rust library for reading the OpenStreetMap PBF file format (\*.osm.pbf). It
 strives to offer the best performance using parallelization and lazy-decoding
 with a simple interface while also exposing iterators for items of every level
-in a PBF file.
+in a PBF file. This is a fork of [osmpbf](https://github.com/b-r-u/osmpbf) that
+adds async streaming support (see the `async` feature) and `object_store`
+integration; the library's own module path is still `osmpbf`.
 
-[![Build status](https://github.com/b-r-u/osmpbf/actions/workflows/ci.yml/badge.svg)](https://github.com/b-r-u/osmpbf/actions)
-[![Build status](https://ci.appveyor.com/api/projects/status/1ct6i2gjsak8tgyy?svg=true)](https://ci.appveyor.com/project/b-r-u/osmpbf)
+[![Build status](https://github.com/OvertureMaps/osm-pbf-parquet/actions/workflows/build_test.yaml/badge.svg)](https://github.com/OvertureMaps/osm-pbf-parquet/actions/workflows/build_test.yaml)
 [![Crates.io](https://img.shields.io/crates/v/osmpbf-async.svg)](https://crates.io/crates/osmpbf-async)
 [![Documentation](https://docs.rs/osmpbf-async/badge.svg)](https://docs.rs/osmpbf-async)
 
@@ -16,7 +17,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-osmpbf = "0.3"
+osmpbf-async = "0.1"
 ```
 
 Here's a simple example that counts all the ways in a file:
