@@ -90,13 +90,19 @@ jobs:
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
     - name: Check osmpbf-async packages cleanly
-      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@ddc42be1d93c397f4ed87198424727637ed0d777 # main
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
       with:
         manifest-path: osmpbf-async/Cargo.toml
         dry-run-only: "true"
 
     - name: Check osm-pbf-parquet packages cleanly
-      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@ddc42be1d93c397f4ed87198424727637ed0d777 # main
+      # continue-on-error: osm-pbf-parquet's workspace dependency on
+      # osmpbf-async requires version 0.1.0, which isn't published to
+      # crates.io yet (only the 0.0.0-reserved placeholder exists), so this
+      # dry-run can't resolve it until the first real release publishes
+      # osmpbf-async. Remove continue-on-error once that's happened.
+      continue-on-error: true
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
       with:
         manifest-path: osm-pbf-parquet/Cargo.toml
         dry-run-only: "true"
