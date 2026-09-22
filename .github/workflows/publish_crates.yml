@@ -33,6 +33,15 @@ jobs:
         with:
           lookup-only: true
 
+      # osmpbf-async and osm-pbf-parquet version independently, but both
+      # publish off the same release event. Without this check, a release
+      # cut only for one crate's version bump would still try to republish
+      # the other crate's unchanged version, and crates.io rejects
+      # re-publishing an existing version, failing the whole job every time.
+      - name: Check if osmpbf-async is already published
+        id: check-osmpbf-async
+        run: bash .github/scripts/check-crate-published.sh osmpbf-async osmpbf-async/Cargo.toml
+
       # osmpbf-async is published first since osm-pbf-parquet depends on it.
       # Only osm-pbf-parquet's version is checked against the release tag:
       # it's the crate release_deploy.yaml ships a binary for per release, so
@@ -43,22 +52,30 @@ jobs:
       # token and passes it through CARGO_REGISTRY_TOKEN on the calling step.
       - name: Authenticate with crates.io (osmpbf-async)
         id: auth-osmpbf-async
+        if: steps.check-osmpbf-async.outputs.already-published != 'true'
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
 
       - name: Publish osmpbf-async
+        if: steps.check-osmpbf-async.outputs.already-published != 'true'
         uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth-osmpbf-async.outputs.token }}
         with:
           manifest-path: osmpbf-async/Cargo.toml
 
+      - name: Check if osm-pbf-parquet is already published
+        id: check-osm-pbf-parquet
+        run: bash .github/scripts/check-crate-published.sh osm-pbf-parquet osm-pbf-parquet/Cargo.toml
+
       # Re-authenticate for the second crate: a token minted above isn't
       # confirmed to be valid for more than one crate.
       - name: Authenticate with crates.io (osm-pbf-parquet)
         id: auth-osm-pbf-parquet
+        if: steps.check-osm-pbf-parquet.outputs.already-published != 'true'
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
 
       - name: Publish osm-pbf-parquet
+        if: steps.check-osm-pbf-parquet.outputs.already-published != 'true'
         uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth-osm-pbf-parquet.outputs.token }}
