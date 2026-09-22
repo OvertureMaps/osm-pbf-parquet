@@ -5,8 +5,8 @@ name: Publish to crates.io
 # osm-pbf-parquet version independently, so there's no single tag that maps
 # cleanly to "release both", "release one", or "release neither". Instead,
 # each crate is published if and only if its current Cargo.toml version
-# isn't already on crates.io (see check-crate-published.sh) -- a merge that
-# doesn't bump a crate's version is a no-op for that crate.
+# isn't already on crates.io -- a merge that doesn't bump a crate's version
+# is a no-op for that crate.
 on:
   push:
     branches: [main]
@@ -49,7 +49,21 @@ jobs:
 
       - name: Check if osmpbf-async is already published
         id: check-osmpbf-async
-        run: bash .github/scripts/check-crate-published.sh osmpbf-async osmpbf-async/Cargo.toml
+        run: |
+          version=$(cargo metadata --no-deps --format-version=1 --manifest-path osmpbf-async/Cargo.toml \
+            | jq -r '.packages[] | select(.name == "osmpbf-async") | .version')
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -A "osm-pbf-parquet-ci (+https://github.com/OvertureMaps/osm-pbf-parquet)" \
+            "https://crates.io/api/v1/crates/osmpbf-async/${version}")
+          if [ "$status" = 200 ]; then
+            echo "already-published=true" >> "$GITHUB_OUTPUT"
+            echo "osmpbf-async \`${version}\` is already published, skipped." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$status" = 404 ]; then
+            echo "already-published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unexpected crates.io API response ($status) checking osmpbf-async ${version}"
+            exit 1
+          fi
 
       # osmpbf-async is published first since osm-pbf-parquet depends on it.
       #
@@ -70,7 +84,21 @@ jobs:
 
       - name: Check if osm-pbf-parquet is already published
         id: check-osm-pbf-parquet
-        run: bash .github/scripts/check-crate-published.sh osm-pbf-parquet osm-pbf-parquet/Cargo.toml
+        run: |
+          version=$(cargo metadata --no-deps --format-version=1 --manifest-path osm-pbf-parquet/Cargo.toml \
+            | jq -r '.packages[] | select(.name == "osm-pbf-parquet") | .version')
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -A "osm-pbf-parquet-ci (+https://github.com/OvertureMaps/osm-pbf-parquet)" \
+            "https://crates.io/api/v1/crates/osm-pbf-parquet/${version}")
+          if [ "$status" = 200 ]; then
+            echo "already-published=true" >> "$GITHUB_OUTPUT"
+            echo "osm-pbf-parquet \`${version}\` is already published, skipped." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$status" = 404 ]; then
+            echo "already-published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unexpected crates.io API response ($status) checking osm-pbf-parquet ${version}"
+            exit 1
+          fi
 
       # Re-authenticate for the second crate: a token minted above isn't
       # confirmed to be valid for more than one crate.
