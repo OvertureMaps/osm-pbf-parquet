@@ -75,3 +75,34 @@ jobs:
       run: cargo build --release -p osm-pbf-parquet
     - name: Run unit tests
       run: cargo test --workspace
+
+  check-crate-packaging:
+    name: Check crate packaging
+    runs-on: ubuntu-latest
+    needs: lint
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+    - name: Check osmpbf-async packages cleanly
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
+      with:
+        manifest-path: osmpbf-async/Cargo.toml
+        dry-run-only: "true"
+
+    - name: Check osm-pbf-parquet packages cleanly
+      # continue-on-error: osm-pbf-parquet's workspace dependency on
+      # osmpbf-async requires version 0.1.0, which isn't published to
+      # crates.io yet (only the 0.0.0-reserved placeholder exists), so this
+      # dry-run can't resolve it until the first real release publishes
+      # osmpbf-async. Remove continue-on-error once that's happened.
+      continue-on-error: true
+      uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
+      with:
+        manifest-path: osm-pbf-parquet/Cargo.toml
+        dry-run-only: "true"
