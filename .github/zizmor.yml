@@ -6,7 +6,7 @@ rules:
   # Remove these once OvertureMaps/workflows tags a release for the action.
   stale-action-refs:
     ignore:
-      - publish_crates.yml:60:15
-      - publish_crates.yml:81:15
+      - publish_crates.yml:80:15
+      - publish_crates.yml:102:15
       - build_test.yaml:93:13
       - build_test.yaml:105:13
