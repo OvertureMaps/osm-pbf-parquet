@@ -1,5 +1,6 @@
 # osm-pbf-parquet
 
+[![Build status](https://github.com/OvertureMaps/osm-pbf-parquet/actions/workflows/build_test.yaml/badge.svg)](https://github.com/OvertureMaps/osm-pbf-parquet/actions/workflows/build_test.yaml)
 [![Crates.io](https://img.shields.io/crates/v/osm-pbf-parquet.svg)](https://crates.io/crates/osm-pbf-parquet)
 [![Documentation](https://docs.rs/osm-pbf-parquet/badge.svg)](https://docs.rs/osm-pbf-parquet)
 [![Crates.io](https://img.shields.io/crates/v/osmpbf-async.svg)](https://crates.io/crates/osmpbf-async)
@@ -92,6 +93,14 @@ SELECT * FROM osm LIMIT 10;
 4. Run against PBF with `cargo run -- --input your.osm.pbf` ([Geofabrik regional PBF extracts here](https://download.geofabrik.de/))
 5. Run `just --list` to see available dev commands (`just test`, `just clippy`, `just ci-test`, etc.)
 
+### Releasing
+
+`osmpbf-async` and `osm-pbf-parquet` are two separate crates that version independently, so there's no single tag or release that covers both.
+
+Publishing to crates.io and cutting a CLI release are two separate, independent mechanisms:
+
+- **crates.io**: bump the version in whichever crate's `Cargo.toml` changed (either one, both, or neither) as part of your PR. `.github/workflows/publish_crates.yml` runs on every merge to `main` and publishes a crate only if its current `Cargo.toml` version isn't already on crates.io, via [Trusted Publishing](https://crates.io/docs/trusted-publishing) (no token to mint or store). A merge that doesn't bump a crate's version is a no-op for that crate; nothing else to do.
+- **CLI binaries**: cut a GitHub release with a `vX.Y.Z` tag to build and attach `osm-pbf-parquet` binaries for each supported platform, via `.github/workflows/release_deploy.yaml`. This is independent of the crates.io publish above; a release doesn't publish anything to crates.io, and a crates.io publish doesn't create a release or attach binaries.
 
 ## Benchmarks
 osm-pbf-parquet prioritizes transcode speed over preserving element ordering.

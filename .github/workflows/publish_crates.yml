@@ -1,19 +1,33 @@
 name: Publish to crates.io
 
+# Publish whichever crate(s) changed on every merge to main, rather than
+# tying publishing to a manually-cut GitHub release: osmpbf-async and
+# osm-pbf-parquet version independently, so there's no single tag that maps
+# cleanly to "release both", "release one", or "release neither". Instead,
+# each crate is published if and only if its current Cargo.toml version
+# isn't already on crates.io -- a merge that doesn't bump a crate's version
+# is a no-op for that crate.
 on:
-  release:
-    types: [created]
+  push:
+    branches: [main]
+    paths:
+      - osmpbf-async/**
+      - osm-pbf-parquet/**
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.release.id }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Don't cancel a run that may already be publishing: crates.io publishes
+  # are atomic server-side, but killing the runner mid-step leaves no clear
+  # signal of whether it landed. A newer push just queues, then re-checks
+  # already-published state once this run finishes, so nothing is lost.
+  cancel-in-progress: false
 
 jobs:
   publish:
-    name: Publish crates
+    name: Publish ${{ matrix.crate }}
     runs-on: ubuntu-latest
     # Must match the repo/workflow/environment registered as a Trusted
     # Publisher for each crate on crates.io.
@@ -21,47 +35,60 @@ jobs:
     permissions:
       contents: read
       id-token: write # Required to mint the crates.io OIDC token
+    strategy:
+      # osm-pbf-parquet depends on osmpbf-async, so it must publish after
+      # osmpbf-async is live on crates.io: max-parallel: 1 serializes the
+      # matrix in the order defined below, and fail-fast stops osm-pbf-parquet
+      # from starting at all if osmpbf-async's job fails.
+      max-parallel: 1
+      fail-fast: true
+      matrix:
+        include:
+          - crate: osmpbf-async
+            manifest-path: osmpbf-async/Cargo.toml
+          - crate: osm-pbf-parquet
+            manifest-path: osm-pbf-parquet/Cargo.toml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # lookup-only: this workflow only reads from the cache, it never writes
-      # a new entry. Writing here would let a release run seed a cache key
-      # that a later, less-trusted run could poison and have restored back.
+      # a new entry. Writing here would let this run seed a cache key that a
+      # later, less-trusted run could poison and have restored back.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           lookup-only: true
 
-      # osmpbf-async is published first since osm-pbf-parquet depends on it.
-      # Only osm-pbf-parquet's version is checked against the release tag:
-      # it's the crate release_deploy.yaml ships a binary for per release, so
-      # its version tracks the tag by convention. osmpbf-async is versioned
-      # independently and won't generally match the same tag.
-      #
+      - name: Check if ${{ matrix.crate }} is already published
+        id: check
+        env:
+          CRATE: ${{ matrix.crate }}
+          MANIFEST_PATH: ${{ matrix.manifest-path }}
+        run: |
+          version=$(cargo metadata --no-deps --format-version=1 --manifest-path "$MANIFEST_PATH" \
+            | jq -r --arg name "$CRATE" '.packages[] | select(.name == $name) | .version')
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -A "osm-pbf-parquet-ci (+https://github.com/OvertureMaps/osm-pbf-parquet)" \
+            "https://crates.io/api/v1/crates/${CRATE}/${version}")
+          if [ "$status" = 200 ]; then
+            echo "already-published=true" >> "$GITHUB_OUTPUT"
+            echo "${CRATE} \`${version}\` is already published, skipped." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "already-published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # The action doesn't authenticate itself: each caller mints its own
       # token and passes it through CARGO_REGISTRY_TOKEN on the calling step.
-      - name: Authenticate with crates.io (osmpbf-async)
-        id: auth-osmpbf-async
+      - name: Authenticate with crates.io
+        id: auth
+        if: steps.check.outputs.already-published != 'true'
         uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
 
-      - name: Publish osmpbf-async
-        uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
+      - name: Publish ${{ matrix.crate }}
+        if: steps.check.outputs.already-published != 'true'
+        uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@main # zizmor: ignore[unpinned-uses] -- same org, no tagged release yet; intentionally tracks main
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth-osmpbf-async.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         with:
-          manifest-path: osmpbf-async/Cargo.toml
-
-      # Re-authenticate for the second crate: a token minted above isn't
-      # confirmed to be valid for more than one crate.
-      - name: Authenticate with crates.io (osm-pbf-parquet)
-        id: auth-osm-pbf-parquet
-        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
-
-      - name: Publish osm-pbf-parquet
-        uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@2ba5afb48f6cff2989cc52e6cf93fef509cc3e76 # no tagged release yet; pinned to OvertureMaps/workflows main
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth-osm-pbf-parquet.outputs.token }}
-        with:
-          manifest-path: osm-pbf-parquet/Cargo.toml
-          release-tag: ${{ github.event.release.tag_name }}
+          manifest-path: ${{ matrix.manifest-path }}
