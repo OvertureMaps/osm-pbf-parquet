@@ -13,5 +13,12 @@ updates:
     commit-message:
       prefix: "[CHORE](deps)"
       include: "scope"
+    groups:
+      patch-and-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     cooldown:
       default-days: 7
