@@ -28,7 +28,7 @@ jobs:
 
     - name: Install Rust components
       run: rustup component add clippy rustfmt
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
     - name: Run clippy
       run: cargo clippy --all-targets -p osm-pbf-parquet
     - name: Run cargo fmt
@@ -45,7 +45,7 @@ jobs:
       with:
         persist-credentials: false
 
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
     - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
     - name: Build
       run: cargo build --release -p osm-pbf-parquet
@@ -70,7 +70,7 @@ jobs:
       with:
         persist-credentials: false
 
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
     - name: Build
       run: cargo build --release -p osm-pbf-parquet
     - name: Run unit tests
@@ -87,7 +87,7 @@ jobs:
       with:
         persist-credentials: false
 
-    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
     - name: Check osmpbf-async packages cleanly
       uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@main # zizmor: ignore[unpinned-uses] -- same org, no tagged release yet; intentionally tracks main
