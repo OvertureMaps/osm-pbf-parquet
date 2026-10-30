@@ -1,6 +1,6 @@
 [workspace]
 members = ["osm-pbf-parquet", "osmpbf-async"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 rust-version = "1.88"
