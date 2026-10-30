@@ -2,6 +2,9 @@
 members = ["osm-pbf-parquet", "osmpbf-async"]
 resolver = "2"
 
+[workspace.package]
+rust-version = "1.88"
+
 # Measured ~4% CPU reduction on transcode (cross-crate inlining into the
 # arrow builder and decode hot paths); build-time cost only affects release
 [profile.release]

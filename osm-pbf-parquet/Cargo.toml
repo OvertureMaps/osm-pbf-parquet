@@ -6,7 +6,7 @@ authors = [
     "Francisco Jiménez <jjcfrank@gmail.com>",
 ]
 edition = "2024"
-rust-version = "1.85"
+rust-version.workspace = true
 license = "MIT"
 description = "Transcode OpenStreetMap PBF files to Parquet with hive-style partitioning by element type."
 homepage = "https://github.com/OvertureMaps/osm-pbf-parquet"

@@ -34,8 +34,20 @@ jobs:
     - name: Run cargo fmt
       run: cargo fmt -p osm-pbf-parquet -- --check
 
-  build-and-test:
-    name: Build and Test
+  build-test:
+    name: Build/Test
+    needs: lint
+    permissions:
+      contents: read
+      pull-requests: read  # repository-metadata-action queries PR data
+      issues: read  # grype-scan-action reads cve-bypass issues
+    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@51037d6aded4be8a30567485fd72cb8e9e624251 # v0.1.0
+    with:
+      runners: '[{"runner": "ubuntu-latest", "arch": "x64"}, {"runner": "ubuntu-24.04-arm", "arch": "arm64"}]'
+      grype_remediation_window_start: '2026-10-30'
+
+  integration-and-bench:
+    name: Integration test and benchmark
     runs-on: ubuntu-latest
     needs: lint
     permissions:
@@ -49,8 +61,6 @@ jobs:
     - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
     - name: Build
       run: cargo build --release -p osm-pbf-parquet
-    - name: Run unit tests
-      run: cargo test --workspace
     - name: Install osmium
       run: sudo apt-get update && sudo apt-get install -y osmium-tool
     - name: Prepare and run test
@@ -58,23 +68,6 @@ jobs:
       working-directory: ./osm-pbf-parquet/test
     - name: Benchmark
       run: cargo bench -p osm-pbf-parquet
-
-  build-and-test-arm:
-    name: Build and Test (arm64)
-    runs-on: ubuntu-24.04-arm
-    needs: lint
-    permissions:
-      contents: read
-    steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      with:
-        persist-credentials: false
-
-    - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-    - name: Build
-      run: cargo build --release -p osm-pbf-parquet
-    - name: Run unit tests
-      run: cargo test --workspace
 
   check-crate-packaging:
     name: Check crate packaging
