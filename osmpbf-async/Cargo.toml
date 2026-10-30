@@ -10,7 +10,7 @@ homepage = "https://github.com/OvertureMaps/osm-pbf-parquet"
 description = "Async streaming reader for the OpenStreetMap PBF file format (*.osm.pbf), with object_store integration. Fork of osmpbf."
 categories = ["parser-implementations", "encoding", "science"]
 keywords = ["openstreetmap", "osm", "pbf", "async", "streaming"]
-rust-version = "1.88"
+rust-version.workspace = true
 license = "MIT OR Apache-2.0"
 edition = "2021"
 readme = "README.md"
@@ -35,7 +35,7 @@ flate2 = { version = "1.0", default-features = false }
 libdeflater = "1.25"
 memmap2 = "0.5"
 simdutf8 = "0.1"
-object_store = { version = "0.13", optional = true }
+object_store = { version = "0.14", optional = true }
 protobuf = { version = "3.1", features = ["with-bytes"] }
 rayon = "1.5"
 tokio = { version =  "1.49", optional = true }
