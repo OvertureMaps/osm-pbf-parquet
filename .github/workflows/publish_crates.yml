@@ -87,8 +87,7 @@ jobs:
 
       - name: Publish ${{ matrix.crate }}
         if: steps.check.outputs.already-published != 'true'
-        uses: OvertureMaps/workflows/.github/actions/publish-crate-to-crates-io@main # zizmor: ignore[unpinned-uses] -- same org, no tagged release yet; intentionally tracks main
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        uses: lfreleng-actions/rust-crate-publish-action@10eccc2817792efe202fca20fca72ae34ef8e749 # v0.3.0
         with:
-          manifest-path: ${{ matrix.manifest-path }}
+          manifest_path: ${{ matrix.manifest-path }}
+          registry_token: ${{ steps.auth.outputs.token }}
