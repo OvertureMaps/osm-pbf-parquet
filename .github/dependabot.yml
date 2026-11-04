@@ -11,7 +11,7 @@ updates:
     labels:
       - "bot"
     commit-message:
-      prefix: "[CHORE](deps)"
+      prefix: "chore"
       include: "scope"
     groups:
       patch-and-minor:
