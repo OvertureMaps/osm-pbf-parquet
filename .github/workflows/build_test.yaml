@@ -41,7 +41,7 @@ jobs:
       contents: read
       pull-requests: read  # repository-metadata-action queries PR data
       issues: read  # grype-scan-action reads cve-bypass issues
-    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@a729f000aa0cf325bb77badaf6420274a028845b # v0.3.0
+    uses: lfreleng-actions/rust-workflows/.github/workflows/build-test.yaml@d0c75ef0b8a4edeaee9b29fd8ff8ed1481c307db # v0.4.0
     with:
       runners: '[{"runner": "ubuntu-latest", "arch": "x64"}, {"runner": "ubuntu-24.04-arm", "arch": "arm64"}]'
       grype_remediation_window_start: '2026-10-30'
@@ -83,7 +83,7 @@ jobs:
     - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
     - name: Check osmpbf-async packages cleanly
-      uses: lfreleng-actions/rust-crate-publish-action@10eccc2817792efe202fca20fca72ae34ef8e749 # v0.3.0
+      uses: lfreleng-actions/rust-crate-publish-action@0892da460668ea24d337f4a00f976d413e1d2448 # v0.3.1
       with:
         manifest_path: osmpbf-async/Cargo.toml
         dry_run: "true"
@@ -95,7 +95,7 @@ jobs:
       # dry-run can't resolve it until the first real release publishes
       # osmpbf-async. Remove continue-on-error once that's happened.
       continue-on-error: true
-      uses: lfreleng-actions/rust-crate-publish-action@10eccc2817792efe202fca20fca72ae34ef8e749 # v0.3.0
+      uses: lfreleng-actions/rust-crate-publish-action@0892da460668ea24d337f4a00f976d413e1d2448 # v0.3.1
       with:
         manifest_path: osm-pbf-parquet/Cargo.toml
         dry_run: "true"

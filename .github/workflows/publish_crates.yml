@@ -87,7 +87,7 @@ jobs:
 
       - name: Publish ${{ matrix.crate }}
         if: steps.check.outputs.already-published != 'true'
-        uses: lfreleng-actions/rust-crate-publish-action@10eccc2817792efe202fca20fca72ae34ef8e749 # v0.3.0
+        uses: lfreleng-actions/rust-crate-publish-action@0892da460668ea24d337f4a00f976d413e1d2448 # v0.3.1
         with:
           manifest_path: ${{ matrix.manifest-path }}
           registry_token: ${{ steps.auth.outputs.token }}
